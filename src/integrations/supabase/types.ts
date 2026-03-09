@@ -14,7 +14,108 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      activities: {
+        Row: {
+          avg_hr: number | null
+          calories: number | null
+          created_at: string
+          distance_meters: number | null
+          duration_sec: number
+          id: string
+          sport_type: Database["public"]["Enums"]["sport_type"]
+          start_time: string
+          total_elevation_gain: number | null
+          user_id: string
+        }
+        Insert: {
+          avg_hr?: number | null
+          calories?: number | null
+          created_at?: string
+          distance_meters?: number | null
+          duration_sec: number
+          id?: string
+          sport_type: Database["public"]["Enums"]["sport_type"]
+          start_time: string
+          total_elevation_gain?: number | null
+          user_id: string
+        }
+        Update: {
+          avg_hr?: number | null
+          calories?: number | null
+          created_at?: string
+          distance_meters?: number | null
+          duration_sec?: number
+          id?: string
+          sport_type?: Database["public"]["Enums"]["sport_type"]
+          start_time?: string
+          total_elevation_gain?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      health_metrics: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          metric_type: Database["public"]["Enums"]["metric_type"]
+          unit: string
+          user_id: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          metric_type: Database["public"]["Enums"]["metric_type"]
+          unit: string
+          user_id: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          metric_type?: Database["public"]["Enums"]["metric_type"]
+          unit?: string
+          user_id?: string
+          value?: number
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          birth_date: string | null
+          created_at: string
+          full_name: string | null
+          height_cm: number | null
+          id: string
+          updated_at: string
+          user_id: string
+          weight_kg: number | null
+        }
+        Insert: {
+          birth_date?: string | null
+          created_at?: string
+          full_name?: string | null
+          height_cm?: number | null
+          id?: string
+          updated_at?: string
+          user_id: string
+          weight_kg?: number | null
+        }
+        Update: {
+          birth_date?: string | null
+          created_at?: string
+          full_name?: string | null
+          height_cm?: number | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+          weight_kg?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +124,14 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      metric_type: "hrv" | "sleep_score" | "rhr" | "body_battery" | "vo2max"
+      sport_type:
+        | "running"
+        | "cycling"
+        | "swimming"
+        | "tennis"
+        | "padel"
+        | "strength"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +258,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      metric_type: ["hrv", "sleep_score", "rhr", "body_battery", "vo2max"],
+      sport_type: [
+        "running",
+        "cycling",
+        "swimming",
+        "tennis",
+        "padel",
+        "strength",
+      ],
+    },
   },
 } as const
