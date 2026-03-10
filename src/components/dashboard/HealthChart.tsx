@@ -51,9 +51,11 @@ export function HealthChart() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, vals]) => ({
         date,
-        dateLabel: days <= 30
+        dateLabel: days <= 7
           ? format(new Date(date), "dd/MM")
-          : format(new Date(date), "dd/MM/yy"),
+          : days <= 90
+            ? format(new Date(date), "dd MMM")
+            : format(new Date(date), "MMM yy"),
         hrv: vals.hrv ?? null,
         sleep_score: vals.sleep_score ?? null,
         weight: vals.weight ?? null,
