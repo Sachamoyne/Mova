@@ -115,9 +115,11 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const workouts = Array.isArray(body.workouts) ? body.workouts : [];
     const metrics = Array.isArray(body.metrics) ? body.metrics : [];
+    const bodyMetrics = Array.isArray(body.body_metrics) ? body.body_metrics : [];
 
     let activitiesImported = 0;
     let metricsImported = 0;
+    let bodyMetricsImported = 0;
     let duplicatesSkipped = 0;
     const errors: string[] = [];
 
