@@ -3,6 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import type { Database } from "@/integrations/supabase/types";
+
+type MetricType = Database["public"]["Enums"]["metric_type"];
 
 const PERIODS = [
   { label: "7j", days: 7 },
