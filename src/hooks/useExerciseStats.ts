@@ -9,25 +9,19 @@ export interface ExerciseStatRow {
   weight_kg: number;
   reps: number;
   sets: number;
+  session_id: string | null;
   created_at: string;
 }
 
-export interface PRCard {
+export interface ExerciseTrackingCard {
   exercise_name: string;
-  current_weight: number;
+  latest_weight: number;
   previous_weight: number | null;
-  gain: number;
-  date: string;
+  progression_pct: number | null;
+  latest_date: string;
+  sparkline: { date: string; weight: number }[];
+  history: { date: string; weight: number }[];
 }
-
-const DEFAULT_EXERCISES = [
-  "Développé Couché",
-  "Squat",
-  "Tirage Dos",
-  "Soulevé de Terre",
-  "Développé Épaules",
-  "Curl Biceps",
-];
 
 export function useExerciseStats() {
   return useQuery({
@@ -43,44 +37,66 @@ export function useExerciseStats() {
   });
 }
 
-export function usePRCards() {
+export function useExerciseTrackingCards(): ExerciseTrackingCard[] {
   const { data: stats = [] } = useExerciseStats();
 
-  const prMap = new Map<string, ExerciseStatRow[]>();
+  const byName = new Map<string, ExerciseStatRow[]>();
   for (const s of stats) {
-    const list = prMap.get(s.exercise_name) || [];
+    const list = byName.get(s.exercise_name) || [];
     list.push(s);
-    prMap.set(s.exercise_name, list);
+    byName.set(s.exercise_name, list);
   }
 
-  const cards: PRCard[] = [];
+  const cards: ExerciseTrackingCard[] = [];
 
-  // Include default exercises even if no data
-  const allExercises = new Set([...DEFAULT_EXERCISES, ...prMap.keys()]);
-
-  for (const name of allExercises) {
-    const entries = prMap.get(name) || [];
-    // Already sorted desc by created_at
-    const current = entries[0];
+  for (const [name, entries] of byName) {
+    // entries are desc by created_at
+    const latest = entries[0];
     const previous = entries[1] || null;
+    const progressionPct = previous && previous.weight_kg > 0
+      ? Math.round(((latest.weight_kg - previous.weight_kg) / previous.weight_kg) * 100)
+      : null;
+
+    // Sparkline: last 10 entries, reversed to asc
+    const sparklineEntries = entries.slice(0, 10).reverse();
+    const sparkline = sparklineEntries.map((e) => ({
+      date: e.created_at.split("T")[0],
+      weight: e.weight_kg,
+    }));
+
+    // Full history (asc)
+    const history = [...entries].reverse().map((e) => ({
+      date: e.created_at.split("T")[0],
+      weight: e.weight_kg,
+    }));
 
     cards.push({
       exercise_name: name,
-      current_weight: current?.weight_kg ?? 0,
+      latest_weight: latest.weight_kg,
       previous_weight: previous?.weight_kg ?? null,
-      gain: current && previous ? current.weight_kg - previous.weight_kg : 0,
-      date: current?.created_at ?? "",
+      progression_pct: progressionPct,
+      latest_date: latest.created_at,
+      sparkline,
+      history,
     });
   }
 
+  // Sort by most recently updated
+  cards.sort((a, b) => b.latest_date.localeCompare(a.latest_date));
+
   return cards;
+}
+
+export function useUniqueExerciseNames(): string[] {
+  const { data: stats = [] } = useExerciseStats();
+  return [...new Set(stats.map((s) => s.exercise_name))];
 }
 
 export function useInsertExerciseStat() {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (values: { exercise_name: string; weight_kg: number; reps?: number; sets?: number }) => {
+    mutationFn: async (values: { exercise_name: string; weight_kg: number; reps?: number; sets?: number; session_id?: string }) => {
       if (!user) throw new Error("Not authenticated");
       const { error } = await supabase.from("exercise_stats").insert({
         user_id: user.id,

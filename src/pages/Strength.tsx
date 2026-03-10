@@ -1,21 +1,22 @@
 import { useActivities } from "@/hooks/useHealthData";
 import { useLatestBodyMetric, useBodyMetrics } from "@/hooks/useBodyMetrics";
-import { usePRCards } from "@/hooks/useExerciseStats";
+import { useExerciseTrackingCards } from "@/hooks/useExerciseStats";
 import { useBodyMetricsSyncStatus, useManualBodySync } from "@/hooks/useBodyMetricsSync";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Dumbbell, Scale, TrendingUp, TrendingDown, Minus, Timer, Flame, Trophy, RefreshCw } from "lucide-react";
+import { Dumbbell, Scale, TrendingUp, TrendingDown, Minus, Timer, Flame, Activity, RefreshCw } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Button } from "@/components/ui/button";
 import LogBodyMetricsDrawer from "@/components/strength/LogBodyMetricsDrawer";
-import UpdatePRDrawer from "@/components/strength/UpdatePRDrawer";
+import LogSessionDrawer from "@/components/strength/LogSessionDrawer";
+import ExerciseCard from "@/components/strength/ExerciseCard";
 import { toast } from "sonner";
 
 export default function Strength() {
   const { data: sessions = [] } = useActivities("strength");
   const { data: latestMetrics = [] } = useLatestBodyMetric();
   const { data: bodyHistory = [] } = useBodyMetrics(30);
-  const prCards = usePRCards();
+  const exerciseCards = useExerciseTrackingCards();
   const { data: syncStatus } = useBodyMetricsSyncStatus();
   const syncMutation = useManualBodySync();
 
@@ -50,7 +51,6 @@ export default function Strength() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-display font-bold text-foreground">Musculation</h1>
         <div className="flex items-center gap-3">
-          {/* Sync status */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">{syncStatus?.label}</span>
             <Button
@@ -64,6 +64,7 @@ export default function Strength() {
             </Button>
           </div>
           <LogBodyMetricsDrawer />
+          <LogSessionDrawer />
         </div>
       </div>
 
@@ -90,7 +91,7 @@ export default function Strength() {
         />
       </div>
 
-      {/* Chart */}
+      {/* Body Composition Chart */}
       {chartData.length > 1 && (
         <div className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-display font-semibold text-foreground mb-3">Évolution 30 jours</h2>
@@ -107,38 +108,26 @@ export default function Strength() {
         </div>
       )}
 
-      {/* PR Grid */}
+      {/* Dynamic Exercise Tracking */}
       <div>
         <h2 className="text-lg font-display font-semibold text-foreground mb-3 flex items-center gap-2">
-          <Trophy className="h-5 w-5 text-strength" />
-          Records Personnels (3×10)
+          <Activity className="h-5 w-5 text-strength" />
+          Suivi de Progression
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {prCards.map((pr) => (
-            <div key={pr.exercise_name} className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">{pr.exercise_name}</span>
-                <UpdatePRDrawer exerciseName={pr.exercise_name} />
-              </div>
-              <div className="flex items-end gap-2">
-                <span className="text-2xl font-display font-bold text-strength">
-                  {pr.current_weight > 0 ? `${pr.current_weight} kg` : "—"}
-                </span>
-                {pr.gain !== 0 && (
-                  <span className={`text-xs font-medium flex items-center gap-0.5 ${pr.gain > 0 ? "text-primary" : "text-destructive"}`}>
-                    {pr.gain > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                    {pr.gain > 0 ? "+" : ""}{pr.gain} kg
-                  </span>
-                )}
-              </div>
-              {pr.date && (
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(pr.date), "d MMM yyyy", { locale: fr })}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
+        {exerciseCards.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {exerciseCards.map((card) => (
+              <ExerciseCard key={card.exercise_name} card={card} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center">
+            <Dumbbell className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Aucun exercice enregistré. Utilise "Log Session" pour commencer ton suivi.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Recent Sessions */}
