@@ -1,4 +1,5 @@
 import { RefreshCw, User, ExternalLink } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
