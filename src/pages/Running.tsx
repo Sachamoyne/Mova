@@ -226,9 +226,6 @@ export default function Running() {
                 fontSize={11}
                 tickLine={false}
                 interval={chartPeriod === "month" ? 4 : 0}
-                  const day = i + 1;
-                  return day === 1 || day % 5 === 0;
-                } : 0}
               />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} unit=" km" tickLine={false} axisLine={false} />
               <Tooltip
