@@ -25,8 +25,6 @@ export default function Strength() {
       onError: (err) => toast.error(err.message),
     });
   };
-  const { data: bodyHistory = [] } = useBodyMetrics(30);
-  const prCards = usePRCards();
 
   const latest = latestMetrics[0];
   const previous = latestMetrics[1];
