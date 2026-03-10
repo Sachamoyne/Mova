@@ -59,7 +59,7 @@ export function AppHeader() {
 
   return (
     <>
-      <header className="h-14 flex items-center justify-between border-b border-border px-4">
+      <header className="flex items-center justify-between border-b border-border px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-2">
           <SidebarTrigger />
         </div>
