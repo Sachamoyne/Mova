@@ -45,7 +45,7 @@ function periodCutoff(period: Period): Date {
 }
 
 export default function Running() {
-  const { data: allRuns = [] } = useActivities("running");
+  const { data: allRuns = [], isError } = useActivities("running");
   const [kpiPeriod, setKpiPeriod] = useState<Period>("month");
   const [chartPeriod, setChartPeriod] = useState<"week" | "month">("month");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
