@@ -39,7 +39,7 @@ export function AppHeader() {
 
   return (
     <>
-      <header className="h-14 flex items-center justify-between border-b border-border px-4">
+      <header className="flex items-center justify-between border-b border-border px-4 pb-2" style={{ paddingTop: 'var(--sat, 20px)' }}>
         <div className="flex items-center gap-2">
           <SidebarTrigger />
         </div>

@@ -6,6 +6,9 @@
 
 @layer base {
   :root {
+    --sat: env(safe-area-inset-top, 20px);
+    --sab: env(safe-area-inset-bottom, 20px);
+
     --background: 220 20% 7%;
     --foreground: 210 20% 92%;
 
@@ -68,9 +71,13 @@
   * {
     @apply border-border;
   }
+  html {
+    background: hsl(var(--background));
+  }
   body {
     @apply bg-background text-foreground font-sans;
     font-family: 'Inter', sans-serif;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Space Grotesk', sans-serif;
