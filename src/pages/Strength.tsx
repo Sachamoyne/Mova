@@ -47,9 +47,24 @@ export default function Strength() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-display font-bold text-foreground">Musculation</h1>
-        <LogBodyMetricsDrawer />
+        <div className="flex items-center gap-3">
+          {/* Sync status */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{syncStatus?.label}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-strength"
+              onClick={handleSync}
+              disabled={syncMutation.isPending}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+          <LogBodyMetricsDrawer />
+        </div>
       </div>
 
       {/* Body Composition Cards */}
