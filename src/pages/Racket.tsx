@@ -1,4 +1,4 @@
-import { useActivities } from "@/hooks/useActivities";
+import { useActivities } from "@/hooks/useHealthData";
 import { useState } from "react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";

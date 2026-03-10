@@ -1,4 +1,4 @@
-import { useActivities } from "@/hooks/useActivities";
+import { useActivities } from "@/hooks/useHealthData";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Dumbbell, Timer, Flame } from "lucide-react";

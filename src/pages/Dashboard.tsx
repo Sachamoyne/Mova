@@ -1,9 +1,11 @@
 import { Heart, Moon, Activity, Wind } from "lucide-react";
-import { useLatestMetrics } from "@/hooks/useHealthMetrics";
+import { useLatestMetrics } from "@/hooks/useHealthData";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
 import { RecentActivities } from "@/components/dashboard/RecentActivities";
 import { SyncBanner } from "@/components/dashboard/SyncBanner";
+import { HrvTrendBadge } from "@/components/dashboard/HrvTrendBadge";
+import { WeeklySummary } from "@/components/dashboard/WeeklySummary";
 
 const kpiConfig = [
   { key: "hrv", label: "HRV", icon: <Activity className="h-4 w-4" />, color: "hsl(152, 60%, 48%)" },
@@ -17,7 +19,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-display font-bold text-foreground">Dashboard</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-display font-bold text-foreground">Dashboard</h1>
+        <HrvTrendBadge />
+      </div>
 
       <SyncBanner />
 
@@ -38,6 +43,7 @@ export default function Dashboard() {
         })}
       </div>
 
+      <WeeklySummary />
       <ActivityHeatmap />
       <RecentActivities />
     </div>
