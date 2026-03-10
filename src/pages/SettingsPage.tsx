@@ -62,22 +62,6 @@ export default function SettingsPage() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const handleSignUp = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) toast.error(error.message);
-    else toast.success("Compte créé ! Vérifiez votre email.");
-    setLoading(false);
-  };
-
-  const handleSignIn = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) toast.error(error.message);
-    else toast.success("Connecté !");
-    setLoading(false);
-  };
-
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     toast.success("Déconnecté");
