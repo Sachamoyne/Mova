@@ -23,6 +23,7 @@ export function AppHeader() {
   const { user } = useAuth();
   const { data: syncStatus } = useSyncStatus();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const handleSync = () => {
     setConnectOpen(true);
