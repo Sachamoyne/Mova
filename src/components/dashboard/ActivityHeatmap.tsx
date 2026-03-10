@@ -1,4 +1,4 @@
-import { useActivityHeatmap } from "@/hooks/useActivities";
+import { useActivityHeatmap } from "@/hooks/useHealthData";
 
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 

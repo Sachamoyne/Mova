@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
-import { insertMockData, clearMockData } from "@/lib/mock-data";
+import { generateTestData, clearTestData } from "@/lib/mock-data";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -44,8 +44,8 @@ export function AppHeader() {
     }
     setMocking(true);
     try {
-      await clearMockData(user.id);
-      await insertMockData(user.id);
+      await clearTestData(user.id);
+      await generateTestData(user.id);
       queryClient.invalidateQueries();
       toast.success("Données de test ajoutées !");
     } catch (e) {

@@ -1,4 +1,4 @@
-import { useHealthMetrics } from "@/hooks/useHealthMetrics";
+import { useHealthMetrics } from "@/hooks/useHealthData";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";

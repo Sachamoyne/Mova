@@ -1,4 +1,4 @@
-import { useActivities } from "@/hooks/useActivities";
+import { useActivities } from "@/hooks/useHealthData";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, startOfWeek, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
