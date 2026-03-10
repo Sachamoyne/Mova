@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label";
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { JsonDropZone } from "@/components/settings/JsonDropZone";
-import { Copy, Key, RefreshCw, CheckCircle2, Clock, Smartphone } from "lucide-react";
+import { Copy, Key, RefreshCw, CheckCircle2, Clock, Smartphone, Database, Trash2 } from "lucide-react";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
+import { generateTestData, clearTestData } from "@/lib/mock-data";
+import { useQueryClient } from "@tanstack/react-query";
 
 function generateApiKey(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
