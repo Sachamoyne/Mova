@@ -6,8 +6,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import {
-  format, parseISO, isAfter, subDays, subMonths, subYears,
-  startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay,
+  format, isAfter, subDays, subMonths, subYears,
+  startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { MapPin, Mountain, Wind, TrendingUp, TrendingDown, Clock, Heart, ArrowUp, Footprints } from "lucide-react";
