@@ -225,7 +225,7 @@ export default function Running() {
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={11}
                 tickLine={false}
-                interval={chartPeriod === "month" ? (i: number) => {
+                interval={chartPeriod === "month" ? 4 : 0}
                   const day = i + 1;
                   return day === 1 || day % 5 === 0;
                 } : 0}
