@@ -88,7 +88,28 @@ export function HealthChart() {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="dateLabel" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+            <XAxis
+              dataKey="dateLabel"
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+              tick={({ x, y, payload }: any) => {
+                const entry = chartData.find((d) => d.dateLabel === payload.value);
+                const icons = entry?.sports?.map((s) => sportIcons[s] || "⚡").join("") || "";
+                return (
+                  <g transform={`translate(${x},${y})`}>
+                    <text x={0} y={0} dy={14} textAnchor="middle" fill="hsl(var(--muted-foreground))" fontSize={12}>
+                      {payload.value}
+                    </text>
+                    {icons && (
+                      <text x={0} y={0} dy={28} textAnchor="middle" fontSize={10}>
+                        {icons}
+                      </text>
+                    )}
+                  </g>
+                );
+              }}
+              height={45}
+            />
             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
             <Tooltip
               contentStyle={{
