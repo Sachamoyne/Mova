@@ -1,16 +1,35 @@
 import { useState, useMemo } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ReferenceDot,
 } from "recharts";
 import { format } from "date-fns";
-import { useHealthMetrics } from "@/hooks/useHealthData";
+import { useHealthMetrics, useActivities } from "@/hooks/useHealthData";
 import { Button } from "@/components/ui/button";
+
+const sportIcons: Record<string, string> = {
+  running: "🏃",
+  cycling: "🚴",
+  swimming: "🏊",
+  tennis: "🎾",
+  padel: "🏓",
+  strength: "🏋️",
+};
 
 export function HealthChart() {
   const [days, setDays] = useState<7 | 30>(7);
-  const { data: metrics = [] } = useHealthMetrics(30); // always fetch 30 to compute MA
+  const { data: metrics = [] } = useHealthMetrics(30);
+  const { data: activities = [] } = useActivities(undefined, 100);
 
-  const { chartData } = useMemo(() => {
+  const { chartData, activityDays } = useMemo(() => {
+    // Build activity day map
+    const actDays: Record<string, string[]> = {};
+    activities.forEach((a) => {
+      const day = a.start_time.split("T")[0];
+      if (!actDays[day]) actDays[day] = [];
+      if (!actDays[day].includes(a.sport_type)) actDays[day].push(a.sport_type);
+    });
+
     // Group by date
     const byDate: Record<string, Record<string, number>> = {};
     metrics.forEach((m) => {
@@ -26,6 +45,7 @@ export function HealthChart() {
         hrv: vals.hrv ?? null,
         sleep_score: vals.sleep_score ?? null,
         rhr: vals.rhr ?? null,
+        sports: actDays[date] || [],
       }));
 
     // Compute 7-day moving average for HRV
@@ -36,11 +56,10 @@ export function HealthChart() {
       return { ...entry, hrv_ma: hrvMA };
     });
 
-    // Slice to selected period
     const sliced = days === 7 ? withMA.slice(-7) : withMA;
 
-    return { chartData: sliced };
-  }, [metrics, days]);
+    return { chartData: sliced, activityDays: actDays };
+  }, [metrics, days, activities]);
 
   return (
     <div className="glass-card p-6 space-y-4">
