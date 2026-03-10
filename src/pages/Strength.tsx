@@ -1,18 +1,30 @@
 import { useActivities } from "@/hooks/useHealthData";
 import { useLatestBodyMetric, useBodyMetrics } from "@/hooks/useBodyMetrics";
 import { usePRCards } from "@/hooks/useExerciseStats";
+import { useBodyMetricsSyncStatus, useManualBodySync } from "@/hooks/useBodyMetricsSync";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Dumbbell, Scale, TrendingUp, TrendingDown, Minus, Timer, Flame, Trophy } from "lucide-react";
+import { Dumbbell, Scale, TrendingUp, TrendingDown, Minus, Timer, Flame, Trophy, RefreshCw } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { Button } from "@/components/ui/button";
 import LogBodyMetricsDrawer from "@/components/strength/LogBodyMetricsDrawer";
 import UpdatePRDrawer from "@/components/strength/UpdatePRDrawer";
+import { toast } from "sonner";
 
 export default function Strength() {
   const { data: sessions = [] } = useActivities("strength");
   const { data: latestMetrics = [] } = useLatestBodyMetric();
   const { data: bodyHistory = [] } = useBodyMetrics(30);
   const prCards = usePRCards();
+  const { data: syncStatus } = useBodyMetricsSyncStatus();
+  const syncMutation = useManualBodySync();
+
+  const handleSync = () => {
+    syncMutation.mutate(undefined, {
+      onSuccess: () => toast.success("Synchronisation lancée"),
+      onError: (err) => toast.error(err.message),
+    });
+  };
 
   const latest = latestMetrics[0];
   const previous = latestMetrics[1];
@@ -35,9 +47,24 @@ export default function Strength() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-display font-bold text-foreground">Musculation</h1>
-        <LogBodyMetricsDrawer />
+        <div className="flex items-center gap-3">
+          {/* Sync status */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{syncStatus?.label}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-strength"
+              onClick={handleSync}
+              disabled={syncMutation.isPending}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+          <LogBodyMetricsDrawer />
+        </div>
       </div>
 
       {/* Body Composition Cards */}

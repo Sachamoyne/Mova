@@ -115,9 +115,11 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const workouts = Array.isArray(body.workouts) ? body.workouts : [];
     const metrics = Array.isArray(body.metrics) ? body.metrics : [];
+    const bodyMetrics = Array.isArray(body.body_metrics) ? body.body_metrics : [];
 
     let activitiesImported = 0;
     let metricsImported = 0;
+    let bodyMetricsImported = 0;
     let duplicatesSkipped = 0;
     const errors: string[] = [];
 
@@ -216,6 +218,52 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- BODY METRICS (weight, body fat, lean body mass) ---
+    for (const item of bodyMetrics as Record<string, unknown>[]) {
+      const date = ((item.date || item.calendarDate || new Date().toISOString().split("T")[0]) as string).split("T")[0];
+      const sourceId = (item.uuid || item.source_id || item.id || null) as string | null;
+
+      const weightKg = typeof item.bodyMass === "number" ? item.bodyMass
+        : typeof item.weight_kg === "number" ? item.weight_kg
+        : typeof item.weight === "number" ? item.weight : null;
+
+      const bodyFatPc = typeof item.bodyFatPercentage === "number" ? item.bodyFatPercentage * 100
+        : typeof item.body_fat_pc === "number" ? item.body_fat_pc
+        : typeof item.bodyFatPercent === "number" ? item.bodyFatPercent : null;
+
+      const leanBodyMass = typeof item.leanBodyMass === "number" ? item.leanBodyMass
+        : typeof item.muscle_mass_kg === "number" ? item.muscle_mass_kg : null;
+
+      // Calculate muscle mass if missing but weight + fat available
+      const muscleMassKg = leanBodyMass
+        ?? (weightKg && bodyFatPc ? Math.round((weightKg * (1 - bodyFatPc / 100)) * 10) / 10 : null);
+
+      if (!weightKg && !bodyFatPc && !muscleMassKg) continue;
+
+      // Upsert: Apple Health data wins over manual for same day
+      const upsertData: Record<string, unknown> = {
+        user_id: userId,
+        date,
+        source: "apple_health",
+        source_id: sourceId,
+        ...(weightKg != null && { weight_kg: Math.round(weightKg * 10) / 10 }),
+        ...(bodyFatPc != null && { body_fat_pc: Math.round(bodyFatPc * 10) / 10 }),
+        ...(muscleMassKg != null && { muscle_mass_kg: muscleMassKg }),
+      };
+
+      // Try upsert on (user_id, date, source)
+      const { error } = await db.from("body_metrics").upsert(upsertData, {
+        onConflict: "user_id,date,source",
+        ignoreDuplicates: false,
+      });
+
+      if (error) {
+        errors.push(`Body metric (${date}): ${error.message}`);
+      } else {
+        bodyMetricsImported++;
+      }
+    }
+
     // Update last_sync
     await db.from("profiles").update({ last_sync: new Date().toISOString() }).eq("user_id", userId);
 
@@ -223,12 +271,13 @@ Deno.serve(async (req) => {
     await db.from("sync_logs").insert({
       user_id: userId,
       source: "apple_health_sync",
-      status: errors.length === 0 ? "success" : (activitiesImported + metricsImported) > 0 ? "partial" : "error",
-      records_imported: activitiesImported + metricsImported,
+      status: errors.length === 0 ? "success" : (activitiesImported + metricsImported + bodyMetricsImported) > 0 ? "partial" : "error",
+      records_imported: activitiesImported + metricsImported + bodyMetricsImported,
       error_message: errors.length > 0 ? errors.join("; ") : null,
       payload: {
         workouts_count: workouts.length,
         metrics_count: metrics.length,
+        body_metrics_count: bodyMetrics.length,
         duplicates_skipped: duplicatesSkipped,
       },
     });
@@ -238,6 +287,7 @@ Deno.serve(async (req) => {
         success: true,
         activities_imported: activitiesImported,
         metrics_imported: metricsImported,
+        body_metrics_imported: bodyMetricsImported,
         duplicates_skipped: duplicatesSkipped,
         errors: errors.length > 0 ? errors : undefined,
       }),
