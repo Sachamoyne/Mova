@@ -1,4 +1,5 @@
 import { RefreshCw, User, ExternalLink } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -22,6 +23,7 @@ export function AppHeader() {
   const { user } = useAuth();
   const { data: syncStatus } = useSyncStatus();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const handleSync = () => {
     setConnectOpen(true);
@@ -39,7 +41,8 @@ export function AppHeader() {
 
   const handleMockData = async () => {
     if (!user) {
-      toast.error("Connectez-vous d'abord");
+      toast.error("Connectez-vous d'abord via la page Paramètres");
+      navigate("/settings");
       return;
     }
     setMocking(true);
