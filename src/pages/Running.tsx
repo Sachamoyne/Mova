@@ -122,8 +122,8 @@ export default function Running() {
       start = startOfMonth(now);
     }
     return allRuns.filter((r) => {
-      const d = parseISO(r.start_time);
-      return isAfter(d, start) || isSameDay(d, start);
+      const d = new Date(r.start_time);
+      return d >= start;
     });
   }, [allRuns, chartPeriod]);
 
