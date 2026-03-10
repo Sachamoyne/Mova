@@ -53,9 +53,11 @@ export function HealthChart() {
         date,
         dateLabel: days <= 7
           ? format(new Date(date), "dd/MM")
-          : days <= 90
-            ? format(new Date(date), "dd MMM")
-            : format(new Date(date), "MMM yy"),
+          : days <= 30
+            ? format(new Date(date), "dd/MM")
+            : days <= 90
+              ? format(new Date(date), "dd/MM/yy")
+              : format(new Date(date), "MM/yyyy"),
         hrv: vals.hrv ?? null,
         sleep_score: vals.sleep_score ?? null,
         weight: vals.weight ?? null,
