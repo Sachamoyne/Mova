@@ -44,8 +44,8 @@ export function AppHeader() {
     }
     setMocking(true);
     try {
-      await clearMockData(user.id);
-      await insertMockData(user.id);
+      await clearTestData(user.id);
+      await generateTestData(user.id);
       queryClient.invalidateQueries();
       toast.success("Données de test ajoutées !");
     } catch (e) {
