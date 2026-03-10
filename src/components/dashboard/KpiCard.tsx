@@ -31,8 +31,7 @@ function useMetricHistory(metricType: string, days: number) {
       const { data, error } = await supabase
         .from("health_metrics")
         .select("value, date, unit")
-        // @ts-ignore - metricType is a valid metric_type enum value
-        .eq("metric_type", metricType)
+        .eq("metric_type", metricType as MetricType)
         .gte("date", since.toISOString().split("T")[0])
         .order("date", { ascending: true });
       if (error) throw error;
