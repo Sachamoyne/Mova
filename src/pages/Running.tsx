@@ -77,27 +77,49 @@ export default function Running() {
   const vo2Prev = vo2Data?.[1]?.value;
   const vo2Trend = vo2Value && vo2Prev ? vo2Value - vo2Prev : 0;
 
-  // Chart data - individual activities filtered by chart period
-  const chartCutoff = useMemo(
-    () => (chartPeriod === "week" ? subDays(new Date(), 7) : subMonths(new Date(), 1)),
-    [chartPeriod]
-  );
-  const chartRuns = useMemo(
-    () =>
-      allRuns
-        .filter((r) => isAfter(parseISO(r.start_time), chartCutoff))
-        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
-    [allRuns, chartCutoff]
-  );
-  const chartData = useMemo(
-    () =>
-      chartRuns.map((r) => ({
-        id: r.id,
-        label: format(parseISO(r.start_time), "dd/MM", { locale: fr }),
-        km: Math.round(((r.distance_meters || 0) / 1000) * 10) / 10,
-      })),
-    [chartRuns]
-  );
+  // Build calendar-based chart data (every day of the period)
+  const chartData = useMemo(() => {
+    const now = new Date();
+    let days: Date[];
+    if (chartPeriod === "week") {
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+      days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+    } else {
+      const monthStart = startOfMonth(now);
+      const monthEnd = endOfMonth(now);
+      days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    }
+
+    return days.map((day) => {
+      const dayRuns = allRuns.filter((r) => isSameDay(parseISO(r.start_time), day));
+      const km = dayRuns.reduce((s, r) => s + (r.distance_meters || 0), 0) / 1000;
+      return {
+        date: day,
+        id: dayRuns.length === 1 ? dayRuns[0].id : dayRuns.length > 1 ? dayRuns[0].id : null,
+        label: chartPeriod === "week"
+          ? format(day, "EEE", { locale: fr })
+          : format(day, "d"),
+        km: Math.round(km * 10) / 10,
+        hasActivity: dayRuns.length > 0,
+      };
+    });
+  }, [allRuns, chartPeriod]);
+
+  // Sync KPIs with chart period range
+  const chartFilteredRuns = useMemo(() => {
+    const now = new Date();
+    let start: Date;
+    if (chartPeriod === "week") {
+      start = startOfWeek(now, { weekStartsOn: 1 });
+    } else {
+      start = startOfMonth(now);
+    }
+    return allRuns.filter((r) => {
+      const d = parseISO(r.start_time);
+      return isAfter(d, start) || isSameDay(d, start);
+    });
+  }, [allRuns, chartPeriod]);
 
   const selectedRun = selectedRunId ? allRuns.find((r) => r.id === selectedRunId) : null;
 
