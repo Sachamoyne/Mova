@@ -56,12 +56,16 @@ export interface WorkoutData {
 }
 
 export interface HealthSnapshot {
-  hrv:       HealthSample[];
-  weight:    HealthSample[];
-  restingHR: HealthSample[];
-  bodyFat:   HealthSample[];
-  sleep:     SleepSample[];
-  workouts:  WorkoutData[];
+  hrv:           HealthSample[];
+  weight:        HealthSample[];
+  restingHR:     HealthSample[];
+  bodyFat:       HealthSample[];
+  sleep:         SleepSample[];
+  workouts:      WorkoutData[];
+  sleepHours:    HealthSample[];   // total heures de sommeil par nuit (h)
+  steps:         HealthSample[];   // total pas par jour (count)
+  caloriesTotal: HealthSample[];   // calories totales journalières (kcal)
+  protein:       HealthSample[];   // protéines journalières (g)
 }
 
 export interface HealthPermissionResult {
@@ -98,6 +102,43 @@ function sleepNightDate(isoDate: string): string {
     return d.toISOString().split("T")[0];
   }
   return d.toISOString().split("T")[0];
+}
+
+/** Regroupe les échantillons par jour et additionne les valeurs (pas de moyenne). */
+function groupByDaySum(samples: HealthSample[]): HealthSample[] {
+  const map = new Map<string, { sum: number; unit: string }>();
+  for (const s of samples) {
+    const prev = map.get(s.date);
+    if (prev) {
+      prev.sum += s.value;
+    } else {
+      map.set(s.date, { sum: s.value, unit: s.unit });
+    }
+  }
+  return Array.from(map.entries()).map(([date, { sum, unit }]) => ({
+    date,
+    value: Math.round(sum * 10) / 10,
+    unit,
+  }));
+}
+
+/**
+ * Calcule le total d'heures de sommeil par nuit à partir des SleepSample.
+ * Seules les phases actives (deep, light, rem, asleep) sont comptées.
+ * Retourne un HealthSample[] avec value en heures (unit: "h").
+ */
+function computeSleepHoursFromSamples(sleepSamples: SleepSample[]): HealthSample[] {
+  const ACTIVE_STATES = new Set(["deep", "light", "rem", "asleep"]);
+  const byDay = new Map<string, number>();
+  for (const s of sleepSamples) {
+    if (!ACTIVE_STATES.has(s.state)) continue;
+    byDay.set(s.date, (byDay.get(s.date) ?? 0) + s.durationMin);
+  }
+  return Array.from(byDay.entries()).map(([date, totalMin]) => ({
+    date,
+    value: Math.round((totalMin / 60) * 10) / 10,
+    unit: "h",
+  }));
 }
 
 /**
@@ -208,9 +249,16 @@ export async function requestHealthPermissions(): Promise<HealthPermissionResult
       "heartRateVariability",
       "bodyFat",
       "exerciseTime",
+      "basalCalories",
+      "totalCalories",
     ];
 
+    // dietaryProtein n'est pas garanti par toutes les versions du plugin → on le tente
+    // en premier et on retombe sur les listes sans lui si ça échoue.
     const tryReadLists: string[][] = [
+      [...baseRead, "dietaryProtein", "workouts"],
+      [...baseRead, "dietaryProtein", "workout"],
+      [...baseRead, "dietaryProtein"],
       [...baseRead, "workouts"],
       [...baseRead, "workout"],
       baseRead,
@@ -331,6 +379,47 @@ async function fetchNativeSleep(days: number): Promise<SleepSample[]> {
   }
 }
 
+/** Récupère les pas journaliers (totalisation par jour). */
+async function fetchDailySteps(days: number): Promise<HealthSample[]> {
+  const raw = await fetchSamples("steps", days);
+  console.log(`[health] fetchDailySteps: ${raw.length} échantillons bruts`);
+  return groupByDaySum(raw).map((s) => ({ ...s, unit: "count" }));
+}
+
+/**
+ * Récupère les calories totales journalières.
+ * Essaie d'abord "totalCalories". Si vide, additionne "calories" (actives) + "basalCalories".
+ * Si basalCalories indisponible, utilise uniquement les actives.
+ */
+async function fetchDailyCalories(days: number): Promise<HealthSample[]> {
+  let raw = await fetchSamples("totalCalories", days);
+  if (raw.length === 0) {
+    const [active, basal] = await Promise.all([
+      fetchSamples("calories", days),
+      fetchSamples("basalCalories", days),
+    ]);
+    console.log(`[health] fetchDailyCalories fallback: actives=${active.length}, basal=${basal.length}`);
+    raw = [...active, ...basal];
+  }
+  if (raw.length === 0) {
+    console.log("[health] fetchDailyCalories: aucune donnée disponible");
+    return [];
+  }
+  console.log(`[health] fetchDailyCalories: ${raw.length} échantillons bruts`);
+  return groupByDaySum(raw).map((s) => ({ ...s, unit: "kcal" }));
+}
+
+/**
+ * Récupère les protéines journalières via dietaryProtein (MyFitnessPal → Apple Health).
+ * Retourne [] sans erreur si le type est indisponible.
+ */
+async function fetchDietaryProtein(days: number): Promise<HealthSample[]> {
+  const raw = await fetchSamples("dietaryProtein", days);
+  console.log(`[health] fetchDietaryProtein: ${raw.length} échantillons bruts`);
+  if (raw.length === 0) return [];
+  return groupByDaySum(raw).map((s) => ({ ...s, unit: "g" }));
+}
+
 async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
   const { startDate, endDate } = isoRange(days);
   try {
@@ -381,31 +470,45 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
 async function fetchNativeHealthData(days: number): Promise<HealthSnapshot> {
   console.group("[health] ── ÉTAPE 2 : Fetch données natives ──");
 
-  const [hrv, weight, restingHR, bodyFat, sleep, workouts] = await Promise.allSettled([
-    fetchSamples("heartRateVariability", days),
-    fetchSamples("weight", days),
-    fetchSamples("restingHeartRate", days),
-    fetchSamples("bodyFat", days),
-    fetchNativeSleep(days),
-    fetchNativeWorkouts(days),
-  ]);
+  const [hrv, weight, restingHR, bodyFat, sleep, workouts, steps, caloriesTotal, protein] =
+    await Promise.allSettled([
+      fetchSamples("heartRateVariability", days),
+      fetchSamples("weight", days),
+      fetchSamples("restingHeartRate", days),
+      fetchSamples("bodyFat", days),
+      fetchNativeSleep(days),
+      fetchNativeWorkouts(days),
+      fetchDailySteps(days),
+      fetchDailyCalories(days),
+      fetchDietaryProtein(days),
+    ]);
+
+  const sleepVal = sleep.status === "fulfilled" ? sleep.value : [];
 
   const snapshot: HealthSnapshot = {
-    hrv:       hrv.status       === "fulfilled" ? hrv.value       : [],
-    weight:    weight.status    === "fulfilled" ? weight.value    : [],
-    restingHR: restingHR.status === "fulfilled" ? restingHR.value : [],
-    bodyFat:   bodyFat.status   === "fulfilled" ? bodyFat.value   : [],
-    sleep:     sleep.status     === "fulfilled" ? sleep.value     : [],
-    workouts:  workouts.status  === "fulfilled" ? workouts.value  : [],
+    hrv:           hrv.status           === "fulfilled" ? hrv.value           : [],
+    weight:        weight.status        === "fulfilled" ? weight.value        : [],
+    restingHR:     restingHR.status     === "fulfilled" ? restingHR.value     : [],
+    bodyFat:       bodyFat.status       === "fulfilled" ? bodyFat.value       : [],
+    sleep:         sleepVal,
+    workouts:      workouts.status      === "fulfilled" ? workouts.value      : [],
+    sleepHours:    computeSleepHoursFromSamples(sleepVal),
+    steps:         steps.status         === "fulfilled" ? steps.value         : [],
+    caloriesTotal: caloriesTotal.status === "fulfilled" ? caloriesTotal.value : [],
+    protein:       protein.status       === "fulfilled" ? protein.value       : [],
   };
 
   console.log("[health] ✓ Snapshot :", {
-    hrv:       snapshot.hrv.length,
-    weight:    snapshot.weight.length,
-    restingHR: snapshot.restingHR.length,
-    bodyFat:   snapshot.bodyFat.length,
-    sleep:     snapshot.sleep.length,
-    workouts:  snapshot.workouts.length,
+    hrv:           snapshot.hrv.length,
+    weight:        snapshot.weight.length,
+    restingHR:     snapshot.restingHR.length,
+    bodyFat:       snapshot.bodyFat.length,
+    sleep:         snapshot.sleep.length,
+    workouts:      snapshot.workouts.length,
+    sleepHours:    snapshot.sleepHours.length,
+    steps:         snapshot.steps.length,
+    caloriesTotal: snapshot.caloriesTotal.length,
+    protein:       snapshot.protein.length,
   });
   console.groupEnd();
   return snapshot;
@@ -425,23 +528,34 @@ function generateDemoData(days: number): HealthSnapshot {
       };
     });
 
+  const dailySamples = (genValue: () => number, unit: string): HealthSample[] =>
+    Array.from({ length: days }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (days - 1 - i));
+      return { date: d.toISOString().split("T")[0], value: genValue(), unit };
+    });
+
   const sleepDemo: SleepSample[] = Array.from({ length: days }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (days - 1 - i));
     return {
       date:        d.toISOString().split("T")[0],
       state:       "asleep",
-      durationMin: Math.round(360 + Math.random() * 120),
+      durationMin: Math.round(390 + Math.random() * 150), // ~6.5h–9h
     };
   });
 
   return {
-    hrv:       samples(55, 12, "millisecond"),
-    weight:    samples(75, 2,  "kilogram"),
-    restingHR: samples(52, 8,  "bpm"),
-    bodyFat:   samples(18, 3,  "percent"),
-    sleep:     sleepDemo,
-    workouts:  [],
+    hrv:           samples(55, 12, "millisecond"),
+    weight:        samples(75, 2,  "kilogram"),
+    restingHR:     samples(52, 8,  "bpm"),
+    bodyFat:       samples(18, 3,  "percent"),
+    sleep:         sleepDemo,
+    workouts:      [],
+    sleepHours:    dailySamples(() => Math.round((6.5 + Math.random() * 2.5) * 10) / 10, "h"),
+    steps:         dailySamples(() => Math.round(6000 + Math.random() * 9000), "count"),
+    caloriesTotal: dailySamples(() => Math.round(2800 + Math.random() * 800), "kcal"),
+    protein:       dailySamples(() => Math.round(140 + Math.random() * 60), "g"),
   };
 }
 

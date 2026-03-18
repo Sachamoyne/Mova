@@ -11,6 +11,10 @@ export interface AppleHealthSyncResult {
   importedWeight: number;
   importedBodyFat: number;
   importedWorkouts: number;
+  importedSleep: number;
+  importedSteps: number;
+  importedCalories: number;
+  importedProtein: number;
   fetched: {
     hrv: number;
     restingHR: number;
@@ -18,6 +22,10 @@ export interface AppleHealthSyncResult {
     weight: number;
     bodyFat: number;
     workouts: number;
+    sleepHours: number;
+    steps: number;
+    caloriesTotal: number;
+    protein: number;
   };
   verified: {
     health_metrics: { hrv: number; rhr: number; sleep_score: number };
@@ -103,12 +111,16 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
   // ── Étape 2 : Récupération des données ───────────────────────────────────
   const snapshot = await fetchHealthData(daysSinceJan1);
   console.info("[appleHealth] Raw samples fetched", {
-    hrv:       snapshot.hrv.length,
-    weight:    snapshot.weight.length,
-    restingHR: snapshot.restingHR.length,
-    bodyFat:   snapshot.bodyFat.length,
-    sleep:     snapshot.sleep.length,
-    workouts:  snapshot.workouts.length,
+    hrv:           snapshot.hrv.length,
+    weight:        snapshot.weight.length,
+    restingHR:     snapshot.restingHR.length,
+    bodyFat:       snapshot.bodyFat.length,
+    sleep:         snapshot.sleep.length,
+    workouts:      snapshot.workouts.length,
+    sleepHours:    snapshot.sleepHours.length,
+    steps:         snapshot.steps.length,
+    caloriesTotal: snapshot.caloriesTotal.length,
+    protein:       snapshot.protein.length,
   });
 
   // ── Étape 3 : Préparation ────────────────────────────────────────────────
@@ -126,6 +138,10 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
   let importedWeight     = 0;
   let importedBodyFat    = 0;
   let importedWorkouts   = 0;
+  let importedSleep      = 0;
+  let importedSteps      = 0;
+  let importedCalories   = 0;
+  let importedProtein    = 0;
 
   // ── Étape 4a : HRV → health_metrics ─────────────────────────────────────
   if (hrvByDay.length > 0) {
@@ -200,7 +216,99 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     console.log("[appleHealth] ✓ Sleep score :", importedSleepScore);
   }
 
-  // ── Étape 4d : Poids + Masse grasse → body_metrics ───────────────────────
+  // ── Étape 4d : Sleep Hours → health_metrics ──────────────────────────────
+  if (snapshot.sleepHours.length > 0) {
+    const rows: TablesInsert<"health_metrics">[] = snapshot.sleepHours.map((s) => ({
+      user_id:     userId,
+      date:        s.date,
+      metric_type: "sleep_hours" as const,
+      value:       s.value,
+      unit:        "h",
+    }));
+    const { error: delErr } = await supabase
+      .from("health_metrics")
+      .delete()
+      .eq("user_id", userId)
+      .eq("metric_type", "sleep_hours")
+      .gte("date", sinceDate);
+    if (delErr) console.warn("[appleHealth] sleep_hours delete warning:", delErr.message);
+
+    const { error } = await supabase.from("health_metrics").insert(rows);
+    if (error) console.error("[appleHealth] sleep_hours insert error:", error);
+    else importedSleep = rows.length;
+    console.log("[appleHealth] ✓ Sleep hours :", importedSleep);
+  }
+
+  // ── Étape 4e : Steps → health_metrics ────────────────────────────────────
+  if (snapshot.steps.length > 0) {
+    const rows: TablesInsert<"health_metrics">[] = snapshot.steps.map((s) => ({
+      user_id:     userId,
+      date:        s.date,
+      metric_type: "steps" as const,
+      value:       s.value,
+      unit:        "count",
+    }));
+    const { error: delErr } = await supabase
+      .from("health_metrics")
+      .delete()
+      .eq("user_id", userId)
+      .eq("metric_type", "steps")
+      .gte("date", sinceDate);
+    if (delErr) console.warn("[appleHealth] steps delete warning:", delErr.message);
+
+    const { error } = await supabase.from("health_metrics").insert(rows);
+    if (error) console.error("[appleHealth] steps insert error:", error);
+    else importedSteps = rows.length;
+    console.log("[appleHealth] ✓ Steps :", importedSteps);
+  }
+
+  // ── Étape 4f : Calories totales → health_metrics ─────────────────────────
+  if (snapshot.caloriesTotal.length > 0) {
+    const rows: TablesInsert<"health_metrics">[] = snapshot.caloriesTotal.map((s) => ({
+      user_id:     userId,
+      date:        s.date,
+      metric_type: "calories_total" as const,
+      value:       s.value,
+      unit:        "kcal",
+    }));
+    const { error: delErr } = await supabase
+      .from("health_metrics")
+      .delete()
+      .eq("user_id", userId)
+      .eq("metric_type", "calories_total")
+      .gte("date", sinceDate);
+    if (delErr) console.warn("[appleHealth] calories_total delete warning:", delErr.message);
+
+    const { error } = await supabase.from("health_metrics").insert(rows);
+    if (error) console.error("[appleHealth] calories_total insert error:", error);
+    else importedCalories = rows.length;
+    console.log("[appleHealth] ✓ Calories totales :", importedCalories);
+  }
+
+  // ── Étape 4g : Protéines → health_metrics ────────────────────────────────
+  if (snapshot.protein.length > 0) {
+    const rows: TablesInsert<"health_metrics">[] = snapshot.protein.map((s) => ({
+      user_id:     userId,
+      date:        s.date,
+      metric_type: "protein" as const,
+      value:       s.value,
+      unit:        "g",
+    }));
+    const { error: delErr } = await supabase
+      .from("health_metrics")
+      .delete()
+      .eq("user_id", userId)
+      .eq("metric_type", "protein")
+      .gte("date", sinceDate);
+    if (delErr) console.warn("[appleHealth] protein delete warning:", delErr.message);
+
+    const { error } = await supabase.from("health_metrics").insert(rows);
+    if (error) console.error("[appleHealth] protein insert error:", error);
+    else importedProtein = rows.length;
+    console.log("[appleHealth] ✓ Protéines :", importedProtein);
+  }
+
+  // ── Étape 4i : Poids + Masse grasse → body_metrics ───────────────────────
   {
     // Fusionner poids et masse grasse par date
     const bodyMap = new Map<string, { weight_kg?: number; body_fat_pc?: number }>();
@@ -240,7 +348,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     }
   }
 
-  // ── Étape 4e : Workouts → activities ─────────────────────────────────────
+  // ── Étape 4j : Workouts → activities ─────────────────────────────────────
   if (snapshot.workouts.length > 0) {
     const startDate = jan1.toISOString();
 
@@ -378,24 +486,34 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
 
   console.info("[appleHealth] Post-import visibility check", verified);
 
-  const importedSamples = importedHrv + importedRhr + importedSleepScore + importedWeight + importedBodyFat + importedWorkouts;
+  const importedSamples =
+    importedHrv + importedRhr + importedSleepScore +
+    importedWeight + importedBodyFat + importedWorkouts +
+    importedSleep + importedSteps + importedCalories + importedProtein;
 
   console.info("[appleHealth] Sync completed", {
     importedHrv, importedRhr, importedSleepScore,
-    importedWeight, importedBodyFat, importedWorkouts, lastSync,
+    importedWeight, importedBodyFat, importedWorkouts,
+    importedSleep, importedSteps, importedCalories, importedProtein,
+    lastSync,
   });
 
   return {
     importedSamples,
     importedHrv, importedRhr, importedSleepScore,
     importedWeight, importedBodyFat, importedWorkouts,
+    importedSleep, importedSteps, importedCalories, importedProtein,
     fetched: {
-      hrv: snapshot.hrv.length,
-      restingHR: snapshot.restingHR.length,
-      sleep: snapshot.sleep.length,
-      weight: snapshot.weight.length,
-      bodyFat: snapshot.bodyFat.length,
-      workouts: snapshot.workouts.length,
+      hrv:           snapshot.hrv.length,
+      restingHR:     snapshot.restingHR.length,
+      sleep:         snapshot.sleep.length,
+      weight:        snapshot.weight.length,
+      bodyFat:       snapshot.bodyFat.length,
+      workouts:      snapshot.workouts.length,
+      sleepHours:    snapshot.sleepHours.length,
+      steps:         snapshot.steps.length,
+      caloriesTotal: snapshot.caloriesTotal.length,
+      protein:       snapshot.protein.length,
     },
     verified,
     lastSync,

@@ -44,6 +44,9 @@ export function SyncStatusCard() {
       queryClient.invalidateQueries({ queryKey: ["body_metrics"] });
       queryClient.invalidateQueries({ queryKey: ["body_metrics_latest"] });
       queryClient.invalidateQueries({ queryKey: ["sync_status"] });
+      queryClient.invalidateQueries({ queryKey: ["latest_nutrition"] });
+      queryClient.invalidateQueries({ queryKey: ["today_workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["calorie_balance"] });
     },
   });
 
@@ -71,7 +74,7 @@ export function SyncStatusCard() {
       <div className="flex items-center gap-3">
         {mutation.isSuccess && !isSyncing && (
           <span className="text-xs text-primary/80">
-            Synchronisation Apple Health terminée ({mutation.data?.importedSamples ?? 0} échantillons)
+            Sync terminé — HRV: {mutation.data?.importedHrv ?? 0}, Sommeil: {mutation.data?.importedSleep ?? 0}, Pas: {mutation.data?.importedSteps ?? 0}, Calories: {mutation.data?.importedCalories ?? 0}, Protéines: {mutation.data?.importedProtein ?? 0}, Poids: {mutation.data?.importedWeight ?? 0}
           </span>
         )}
         {mutation.isError && !isSyncing && (
