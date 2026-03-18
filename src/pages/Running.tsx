@@ -106,6 +106,21 @@ export default function Running() {
 
   // Chart data
   const chartData: ChartEntry[] = useMemo(() => {
+    const dedupeRuns = (runs: any[]) => {
+      const seen = new Set<string>();
+      return runs.filter((r) => {
+        const start = typeof r.start_time === "string" ? r.start_time : "";
+        // Dédoublonnage “robuste”: même minute + même distance ≈ même séance importée deux fois
+        const minuteKey = start ? start.slice(0, 16) : "";
+        const distKey = Math.round((r.distance_meters || 0) / 10) * 10; // arrondi à 10m
+        const durKey = Math.round((r.duration_sec || 0) / 5) * 5; // arrondi à 5s
+        const key = `${minuteKey}|${distKey}|${durKey}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    };
+
     if (period === "year") {
       const months = eachMonthOfInterval({ start: periodRange.start, end: periodRange.end });
       return months.map((month) => {
@@ -113,13 +128,14 @@ export default function Running() {
           const d = new Date(r.start_time);
           return d.getFullYear() === month.getFullYear() && d.getMonth() === month.getMonth();
         });
-        const km = monthRuns.reduce((s, r) => s + (r.distance_meters || 0), 0) / 1000;
+        const uniqueMonthRuns = dedupeRuns(monthRuns);
+        const km = uniqueMonthRuns.reduce((s, r) => s + (r.distance_meters || 0), 0) / 1000;
         return {
           label: format(month, "MMM", { locale: fr }),
           dateLabel: format(month, "MMMM yyyy", { locale: fr }),
           km: Math.round(km * 10) / 10,
-          hasActivity: monthRuns.length > 0,
-          id: monthRuns.length > 0 ? monthRuns[0].id : null,
+          hasActivity: uniqueMonthRuns.length > 0,
+          id: uniqueMonthRuns.length > 0 ? uniqueMonthRuns[0].id : null,
           monthIndex: month.getMonth(),
         };
       });
@@ -133,15 +149,16 @@ export default function Running() {
                rd.getMonth() === day.getMonth() &&
                rd.getDate() === day.getDate();
       });
-      const km = dayRuns.reduce((s, r) => s + (r.distance_meters || 0), 0) / 1000;
+      const uniqueDayRuns = dedupeRuns(dayRuns);
+      const km = uniqueDayRuns.reduce((s, r) => s + (r.distance_meters || 0), 0) / 1000;
       return {
         label: period === "week"
           ? format(day, "EEE", { locale: fr })
           : format(day, "d"),
         dateLabel: format(day, "EEEE d MMMM", { locale: fr }),
         km: Math.round(km * 10) / 10,
-        hasActivity: dayRuns.length > 0,
-        id: dayRuns.length > 0 ? dayRuns[0].id : null,
+        hasActivity: uniqueDayRuns.length > 0,
+        id: uniqueDayRuns.length > 0 ? uniqueDayRuns[0].id : null,
       };
     });
   }, [allRuns, period, periodRange]);
@@ -262,6 +279,14 @@ export default function Running() {
                 fontSize={11}
                 tickLine={false}
                 interval={xAxisInterval}
+                tickFormatter={(value: string) => {
+                  // Pour la vue "Année", on affiche uniquement l'initiale du mois (J, F, M, ...)
+                  if (period === "year") {
+                    // value est déjà un label court type "janv", "févr", etc. → on garde la première lettre
+                    return value?.charAt(0).toUpperCase();
+                  }
+                  return value;
+                }}
               />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} unit=" km" tickLine={false} axisLine={false} />
               <Tooltip

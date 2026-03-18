@@ -125,10 +125,17 @@ export function HealthChart() {
                 const icons = days <= 7
                   ? entry?.sports?.map((s) => sportIcons[s] || "⚡").join("") || ""
                   : "";
+
+                // Si on est sur des périodes longues (3 mois, 1 an), on raccourcit le label (initiale de mois)
+                const label =
+                  days >= 90 && typeof payload.value === "string"
+                    ? payload.value.charAt(0).toUpperCase()
+                    : payload.value;
+
                 return (
                   <g transform={`translate(${x},${y})`}>
                     <text x={0} y={0} dy={14} textAnchor="middle" fill="hsl(var(--muted-foreground))" fontSize={11}>
-                      {payload.value}
+                      {label}
                     </text>
                     {icons && (
                       <text x={0} y={0} dy={28} textAnchor="middle" fontSize={10}>

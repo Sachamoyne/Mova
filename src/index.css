@@ -9,37 +9,38 @@
     --sat: env(safe-area-inset-top, 20px);
     --sab: env(safe-area-inset-bottom, 20px);
 
-    --background: 220 20% 7%;
-    --foreground: 210 20% 92%;
+    /* Light theme palette */
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
 
-    --card: 220 18% 10%;
-    --card-foreground: 210 20% 92%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --popover: 220 18% 12%;
-    --popover-foreground: 210 20% 92%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 152 60% 48%;
-    --primary-foreground: 220 20% 7%;
+    --primary: 152 60% 48%; /* accent verts conservés */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 16% 16%;
-    --secondary-foreground: 210 20% 85%;
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 222 47% 20%;
 
-    --muted: 220 14% 14%;
-    --muted-foreground: 215 15% 55%;
+    --muted: 210 16% 95%;
+    --muted-foreground: 215 16% 35%;
 
-    --accent: 220 16% 18%;
-    --accent-foreground: 210 20% 92%;
+    --accent: 210 20% 94%;
+    --accent-foreground: 222 47% 11%;
 
     --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 220 14% 18%;
-    --input: 220 14% 18%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
     --ring: 152 60% 48%;
 
     --radius: 0.75rem;
 
-    /* Sport-specific colors */
+    /* Sport-specific accent colors (inchangés) */
     --hrv: 152 60% 48%;
     --sleep: 217 91% 60%;
     --rhr: 0 84% 60%;
@@ -51,18 +52,19 @@
     --strength: 262 83% 58%;
     --vo2max: 172 66% 50%;
 
-    /* Glass effect */
-    --glass-bg: 220 18% 10% / 0.6;
-    --glass-border: 220 14% 22%;
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    /* Glass effect adapté au light mode */
+    --glass-bg: 0 0% 100% / 0.75;
+    --glass-border: 214 32% 91%;
+    --glass-shadow: 0 12px 30px 0 rgba(15, 23, 42, 0.08);
 
-    --sidebar-background: 220 20% 5%;
-    --sidebar-foreground: 210 15% 70%;
+    /* Sidebar en clair */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 20%;
     --sidebar-primary: 152 60% 48%;
-    --sidebar-primary-foreground: 220 20% 7%;
-    --sidebar-accent: 220 16% 12%;
-    --sidebar-accent-foreground: 210 20% 92%;
-    --sidebar-border: 220 14% 14%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 20% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
     --sidebar-ring: 152 60% 48%;
   }
 }

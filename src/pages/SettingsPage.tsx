@@ -4,9 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { JsonDropZone } from "@/components/settings/JsonDropZone";
-import { Copy, Key, RefreshCw, CheckCircle2, Clock, Smartphone, Database, Trash2 } from "lucide-react";
-import { useSyncStatus } from "@/hooks/useSyncStatus";
+import { Copy, Key, RefreshCw, CheckCircle2, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 function generateApiKey(): string {
@@ -23,11 +21,8 @@ export default function SettingsPage() {
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [mockLoading, setMockLoading] = useState(false);
-  const syncStatus = useSyncStatus();
   const queryClient = useQueryClient();
   const isDev = import.meta.env.DEV;
-
-  const endpointUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/apple-health-sync`;
 
   const fetchApiKey = useCallback(async () => {
     if (!user) return;
@@ -75,85 +70,7 @@ export default function SettingsPage() {
         <p className="text-foreground font-medium">{user?.email}</p>
         <Button variant="outline" onClick={handleSignOut}>Se déconnecter</Button>
       </div>
-
-      {/* Apple Health Sync Section */}
-      <div className="glass-card p-6 space-y-5">
-        <div className="flex items-center gap-2">
-          <Smartphone className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">Sync iPhone (Raccourcis iOS)</h2>
-        </div>
-
-        {/* Endpoint URL */}
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">URL de l'endpoint</Label>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs bg-muted px-3 py-2 rounded-lg font-mono break-all text-foreground">
-              {endpointUrl}
-            </code>
-            <Button variant="outline" size="icon" onClick={() => copyToClipboard(endpointUrl, "URL")} className="shrink-0">
-              {copied === "URL" ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-
-        {/* API Key */}
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Clé API personnelle</Label>
-          {apiKey ? (
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs bg-muted px-3 py-2 rounded-lg font-mono break-all text-foreground">
-                {apiKey}
-              </code>
-              <Button variant="outline" size="icon" onClick={() => copyToClipboard(apiKey, "Clé API")} className="shrink-0">
-                {copied === "Clé API" ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
-              </Button>
-              <Button variant="outline" size="icon" onClick={handleGenerateKey} disabled={apiKeyLoading} className="shrink-0">
-                <RefreshCw className={`h-4 w-4 ${apiKeyLoading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          ) : (
-            <Button onClick={handleGenerateKey} disabled={apiKeyLoading} variant="outline" className="w-full">
-              <Key className="h-4 w-4 mr-2" />
-              Générer une clé API
-            </Button>
-          )}
-        </div>
-
-        {/* Last sync */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          <span>
-            {syncStatus.data?.lastSync
-              ? `Dernière synchronisation réussie : ${syncStatus.data.lastSync.toLocaleString("fr-FR")}`
-              : "Aucune synchronisation pour l'instant"}
-          </span>
-        </div>
-
-        {/* Instructions */}
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer hover:text-foreground transition-colors font-medium">
-            Comment configurer le Raccourci iOS ?
-          </summary>
-          <ol className="mt-2 space-y-1.5 pl-4 list-decimal">
-            <li>Ouvrez l'app <strong>Raccourcis</strong> sur votre iPhone</li>
-            <li>Créez un nouveau raccourci</li>
-            <li>Ajoutez l'action <strong>« Obtenir les échantillons de santé »</strong></li>
-            <li>Ajoutez l'action <strong>« Obtenir le contenu de l'URL »</strong></li>
-            <li>Collez l'URL ci-dessus, méthode <strong>POST</strong></li>
-            <li>Ajoutez le header <code className="bg-muted px-1 rounded">x-api-key</code> avec votre clé API</li>
-            <li>Corps : JSON avec <code className="bg-muted px-1 rounded">workouts</code> et <code className="bg-muted px-1 rounded">metrics</code></li>
-          </ol>
-        </details>
-      </div>
-
-      {/* Manual JSON import */}
-      <div className="glass-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Import manuel de données</h2>
-        <p className="text-sm text-muted-foreground">
-          Glissez un fichier JSON contenant vos activités et métriques de santé.
-        </p>
-        <JsonDropZone />
-      </div>
+      {/* (Section Sync iPhone & import manuel supprimées) */}
 
       {/* Reset all data */}
       <div className="glass-card p-6 space-y-4 border border-destructive/30">
@@ -185,6 +102,50 @@ export default function SettingsPage() {
         >
           <Trash2 className="h-4 w-4 mr-2" />
           {mockLoading ? "Suppression..." : "Supprimer toutes mes données"}
+        </Button>
+      </div>
+
+      {/* Delete account */}
+      <div className="glass-card p-6 space-y-4 border border-destructive/50 bg-destructive/5">
+        <div className="flex items-center gap-2">
+          <Trash2 className="h-5 w-5 text-destructive" />
+          <h2 className="text-lg font-semibold text-foreground">Supprimer mon compte</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Supprime ton profil et toutes tes données de PERF-TRACK. Cette action est définitive et te déconnectera de l'application.
+        </p>
+        <Button
+          variant="destructive"
+          onClick={async () => {
+            if (!user) return;
+            const confirmed = window.confirm(
+              "Supprimer définitivement ton compte PERF-TRACK et toutes tes données associées ? Cette action est irréversible."
+            );
+            if (!confirmed) return;
+            setLoading(true);
+            try {
+              // Supprime toutes les données liées
+              const { error: clearError } = await supabase.rpc("clear_user_data", { _user_id: user.id });
+              if (clearError) throw clearError;
+
+              // Supprime le profil applicatif
+              const { error: profileError } = await supabase.from("profiles").delete().eq("user_id", user.id);
+              if (profileError) throw profileError;
+
+              // Déconnecte l'utilisateur (l'entrée auth restera côté Supabase, mais n'aura plus de données app)
+              await supabase.auth.signOut();
+
+              queryClient.clear();
+              toast.success("Ton compte PERF-TRACK et tes données ont été supprimés.");
+            } catch (e: any) {
+              toast.error(e.message || "Erreur lors de la suppression du compte");
+            }
+            setLoading(false);
+          }}
+          disabled={loading}
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          {loading ? "Suppression du compte..." : "Supprimer mon compte"}
         </Button>
       </div>
 

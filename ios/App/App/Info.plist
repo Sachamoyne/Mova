@@ -25,7 +25,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Athletes Ascent lit votre variabilité de fréquence cardiaque (HRV) et votre poids depuis Apple Santé pour calculer votre score de forme et suivre votre progression.</string>
+	<string>Athletes Ascent accède à vos données Apple Santé pour calculer votre score de forme et suivre votre progression : fréquence cardiaque (HRV, FC repos), poids, masse grasse, sommeil (profond, léger, REM), séances sportives (course, tennis, padel, musculation), pas et calories. Aucune donnée n'est partagée en dehors de votre compte.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Athletes Ascent peut enregistrer vos données d'entraînement dans Apple Santé.</string>
 	<key>UILaunchStoryboardName</key>

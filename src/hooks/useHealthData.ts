@@ -179,16 +179,27 @@ const sportLabels: Record<SportType, string> = {
 };
 
 export function useWeeklySportSummary(): { data: WeeklySportSummary[]; isLoading: boolean } {
-  const since = new Date();
-  since.setDate(since.getDate() - 7);
+  // Semaine ISO: lundi 00:00 → dimanche 23:59 (timezone locale)
+  const now = new Date();
+  const weekStart = new Date(now);
+  weekStart.setHours(0, 0, 0, 0);
+  // 0=Dimanche, 1=Lundi... → on veut lundi
+  const day = weekStart.getDay(); // 0..6
+  const diffToMonday = (day + 6) % 7; // lundi => 0, dimanche => 6
+  weekStart.setDate(weekStart.getDate() - diffToMonday);
+
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  weekEnd.setMilliseconds(-1); // dimanche 23:59:59.999
 
   const { data: activities, isLoading } = useQuery({
-    queryKey: ["weekly_summary"],
+    queryKey: ["weekly_summary", weekStart.toISOString().slice(0, 10)],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("activities")
         .select("sport_type, duration_sec")
-        .gte("start_time", since.toISOString());
+        .gte("start_time", weekStart.toISOString())
+        .lte("start_time", weekEnd.toISOString());
       if (error) throw error;
       return data ?? [];
     },

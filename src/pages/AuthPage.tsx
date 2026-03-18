@@ -24,14 +24,58 @@ export default function AuthPage() {
     }
 
     setLoading(true);
-    if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) toast.error(error.message);
-      else toast.success("Connecté !");
-    } else {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) toast.error(error.message);
-      else toast.success("Compte créé ! Vérifiez votre email pour confirmer.");
+    const redirectTo = (() => {
+      try {
+        return `${window.location.origin}/auth`;
+      } catch {
+        return undefined;
+      }
+    })();
+
+    try {
+      console.log("[auth] submit", {
+        mode: isLogin ? "login" : "signup",
+        email,
+        redirectTo,
+        supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+      });
+
+      if (isLogin) {
+        const res = await supabase.auth.signInWithPassword({ email, password });
+        console.log("[auth] signInWithPassword result", res);
+        if (res.error) {
+          console.error("[auth] signInWithPassword error", res.error);
+          toast.error(res.error.message);
+        } else {
+          toast.success("Connecté !");
+        }
+      } else {
+        const res = await supabase.auth.signUp({
+          email,
+          password,
+          options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+        });
+
+        console.log("[auth] signUp result", res);
+
+        if (res.error) {
+          console.error("[auth] signUp error", res.error);
+          toast.error(res.error.message);
+        } else {
+          // Supabase crée l'utilisateur même si email confirmation est activée.
+          // user peut être null si un lien de confirmation est requis.
+          const hasUser = !!res.data?.user;
+          const hasSession = !!res.data?.session;
+          toast.success(
+            hasSession || hasUser
+              ? "Compte créé !"
+              : "Compte créé ! Vérifiez votre email pour confirmer."
+          );
+        }
+      }
+    } catch (err: any) {
+      console.error("[auth] unexpected error", err);
+      toast.error(err?.message || "Erreur d'authentification");
     }
     setLoading(false);
   };

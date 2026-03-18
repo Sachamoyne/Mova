@@ -1,31 +1,17 @@
 import { useActivities } from "@/hooks/useHealthData";
 import { useLatestBodyMetric, useBodyMetrics } from "@/hooks/useBodyMetrics";
 import { useExerciseTrackingCards } from "@/hooks/useExerciseStats";
-import { useBodyMetricsSyncStatus, useManualBodySync } from "@/hooks/useBodyMetricsSync";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Dumbbell, Scale, TrendingUp, TrendingDown, Minus, Timer, Flame, Activity, RefreshCw } from "lucide-react";
+import { Dumbbell, Scale, TrendingUp, TrendingDown, Minus, Timer, Flame, Activity } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Button } from "@/components/ui/button";
-import LogBodyMetricsDrawer from "@/components/strength/LogBodyMetricsDrawer";
-import LogSessionDrawer from "@/components/strength/LogSessionDrawer";
 import ExerciseCard from "@/components/strength/ExerciseCard";
-import { toast } from "sonner";
 
 export default function Strength() {
   const { data: sessions = [] } = useActivities("strength");
   const { data: latestMetrics = [] } = useLatestBodyMetric();
   const { data: bodyHistory = [] } = useBodyMetrics(30);
   const exerciseCards = useExerciseTrackingCards();
-  const { data: syncStatus } = useBodyMetricsSyncStatus();
-  const syncMutation = useManualBodySync();
-
-  const handleSync = () => {
-    syncMutation.mutate(undefined, {
-      onSuccess: () => toast.success("Synchronisation lancée"),
-      onError: (err) => toast.error(err.message),
-    });
-  };
 
   const latest = latestMetrics[0];
   const previous = latestMetrics[1];
@@ -40,7 +26,7 @@ export default function Strength() {
   const chartData = bodyHistory
     .filter((m) => m.weight_kg || m.muscle_mass_kg)
     .map((m) => ({
-      date: format(new Date(m.date), "dd/MM"),
+      date: m.date, // ISO YYYY-MM-DD (formatting handled by XAxis tickFormatter)
       Poids: m.weight_kg,
       Muscle: m.muscle_mass_kg,
     }));
@@ -50,22 +36,6 @@ export default function Strength() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-display font-bold text-foreground">Musculation</h1>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{syncStatus?.label}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-strength"
-              onClick={handleSync}
-              disabled={syncMutation.isPending}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
-          <LogBodyMetricsDrawer />
-          <LogSessionDrawer />
-        </div>
       </div>
 
       {/* Body Composition Cards */}
@@ -98,7 +68,13 @@ export default function Strength() {
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => format(new Date(v), "dd/MM", { locale: fr })}
+              />
               <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} domain={["dataMin - 1", "dataMax + 1"]} />
               <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--foreground))" }} />
               <Line type="monotone" dataKey="Poids" stroke="hsl(var(--strength))" strokeWidth={2} dot={false} />
@@ -124,7 +100,7 @@ export default function Strength() {
           <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center">
             <Dumbbell className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">
-              Aucun exercice enregistré. Utilise "Log Session" pour commencer ton suivi.
+              Aucun exercice enregistré pour l’instant. Les séances de musculation seront importées automatiquement depuis Apple Health dès qu’elles apparaissent dans l’app Santé.
             </p>
           </div>
         )}
