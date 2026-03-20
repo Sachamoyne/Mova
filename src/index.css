@@ -97,3 +97,8 @@
     @apply px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
 }
+
+/* Safe area sidebar iOS */
+[data-sidebar="sidebar"] {
+  padding-top: env(safe-area-inset-top, 0px);
+}
