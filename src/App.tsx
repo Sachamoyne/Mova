@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Running from "./pages/Running";
 import Racket from "./pages/Racket";
 import Strength from "./pages/Strength";
+import Journal from "./pages/Journal";
 import SettingsPage from "./pages/SettingsPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
@@ -37,6 +38,7 @@ function ProtectedRoutes() {
         <Route path="/running" element={<Running />} />
         <Route path="/racket" element={<Racket />} />
         <Route path="/strength" element={<Strength />} />
+        <Route path="/journal" element={<Journal />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

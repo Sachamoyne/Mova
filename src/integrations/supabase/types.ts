@@ -172,6 +172,48 @@ export type Database = {
         }
         Relationships: []
       }
+      journal_entries: {
+        Row: {
+          created_at: string
+          date: string
+          free_text: string | null
+          gratitude_1: string | null
+          gratitude_2: string | null
+          gratitude_3: string | null
+          id: string
+          mood: string | null
+          mood_intensity: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          free_text?: string | null
+          gratitude_1?: string | null
+          gratitude_2?: string | null
+          gratitude_3?: string | null
+          id?: string
+          mood?: string | null
+          mood_intensity?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          free_text?: string | null
+          gratitude_1?: string | null
+          gratitude_2?: string | null
+          gratitude_3?: string | null
+          id?: string
+          mood?: string | null
+          mood_intensity?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           api_key: string | null

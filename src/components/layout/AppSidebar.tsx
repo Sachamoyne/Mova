@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LayoutDashboard, Timer, Swords, Dumbbell, Settings, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Timer, Swords, Dumbbell, Settings, ChevronRight, BookOpen } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -22,6 +22,10 @@ const sportItems = [
   { title: "Running", url: "/running", icon: Timer },
   { title: "Raquette", url: "/racket", icon: Swords },
   { title: "Musculation", url: "/strength", icon: Dumbbell },
+];
+
+const mentalItems = [
+  { title: "Journal", url: "/journal", icon: BookOpen },
 ];
 
 const bottomItems = [
@@ -57,6 +61,32 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end
+                      className="hover:bg-accent/50"
+                      activeClassName="bg-accent text-primary font-medium"
+                    >
+                      <item.icon className="mr-2 h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Groupe Mental */}
+        <SidebarGroup>
+          {!collapsed && (
+            <div className="text-xs text-muted-foreground px-2 py-1">Mental</div>
+          )}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {mentalItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={item.url}
+                      end={false}
                       className="hover:bg-accent/50"
                       activeClassName="bg-accent text-primary font-medium"
                     >
