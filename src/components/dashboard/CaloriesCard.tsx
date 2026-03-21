@@ -38,7 +38,7 @@ function useLatestNutrition(date?: string) {
           fat: latest["fat"] ?? 0,
           fatTarget: 103,
           caloriesTarget: 3400,
-          proteinTarget: 180,
+          proteinTarget: 220,
         };
       }
 
@@ -64,7 +64,7 @@ function useLatestNutrition(date?: string) {
           fat: latest["fat"] ?? 0,
           fatTarget: 103,
           caloriesTarget: 3400,
-          proteinTarget: 180,
+          proteinTarget: 220,
         };
       }
 
@@ -168,7 +168,7 @@ export function CaloriesCard({ date }: { date?: string }) {
   const calories = data?.calories ?? null;
   const protein = data?.protein ?? null;
   const caloriesTarget = data?.caloriesTarget ?? 3400;
-  const proteinTarget = data?.proteinTarget ?? 180;
+  const proteinTarget = data?.proteinTarget ?? 220;
 
   const pct = calories != null ? Math.min((calories / caloriesTarget) * 100, 100) : 0;
   const remaining = calories != null ? Math.max(caloriesTarget - calories, 0) : caloriesTarget;

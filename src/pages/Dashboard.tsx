@@ -63,6 +63,7 @@ export default function Dashboard() {
           icon={<Scale className="h-4 w-4" />}
           source="body_metrics"
           bodyField="weight_kg"
+          forceRaw
         />
       </div>
 
@@ -112,6 +113,7 @@ export default function Dashboard() {
           source="body_metrics"
           bodyField="body_fat_pc"
           invertDelta
+          forceRaw
         />
       </div>
 

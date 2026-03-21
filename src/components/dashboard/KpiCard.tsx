@@ -69,6 +69,7 @@ interface KpiCardProps {
   bodyField?: "weight_kg" | "body_fat_pc" | "muscle_mass_kg";
   invertDelta?: boolean;
   aggMode?: "average" | "sum";
+  forceRaw?: boolean;
 }
 
 function useMetricHistory(metricType: string, days: number, enabled: boolean) {
@@ -115,11 +116,12 @@ function useBodyMetricHistory(field: string, days: number) {
 
 export function KpiCard({
   metricType, label, unit, color, icon,
-  source = "health_metrics", bodyField, invertDelta, aggMode = "average",
+  source = "health_metrics", bodyField, invertDelta, aggMode = "average", forceRaw = false,
 }: KpiCardProps) {
   const [periodIdx, setPeriodIdx] = useState(0);
   const period = PERIODS[periodIdx];
-  const isMonthly = period.days >= 90;
+  const shouldForceRaw = forceRaw || metricType === "weight";
+  const isMonthly = period.days >= 90 && !shouldForceRaw;
   const zeroBased = ZERO_BASED.includes(metricType);
 
   const enableHealth = source === "health_metrics" && isHealthMetricType(metricType);
