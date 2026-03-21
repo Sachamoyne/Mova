@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { useHealthMetrics, useActivities } from "@/hooks/useHealthData";
 import { useBodyMetrics } from "@/hooks/useBodyMetrics";
 import { Button } from "@/components/ui/button";
+import { parseLocalDate } from "@/lib/utils";
 
 const sportIcons: Record<string, string> = {
   running: "🏃",
@@ -52,12 +53,12 @@ export function HealthChart() {
       .map(([date, vals]) => ({
         date,
         dateLabel: days <= 7
-          ? format(new Date(date), "dd/MM")
+          ? format(parseLocalDate(date), "dd/MM")
           : days <= 30
-            ? format(new Date(date), "dd/MM")
+            ? format(parseLocalDate(date), "dd/MM")
             : days <= 90
-              ? format(new Date(date), "dd/MM/yy")
-              : format(new Date(date), "MM/yyyy"),
+              ? format(parseLocalDate(date), "dd/MM/yy")
+              : format(parseLocalDate(date), "MM/yyyy"),
         hrv: vals.hrv ?? null,
         sleep_hours: vals.sleep_hours ?? null,
         weight: vals.weight ?? null,

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useJournalEntry, useJournalHistory, useUpsertJournal, type JournalEntry } from "@/hooks/useJournal";
+import { parseLocalDate } from "@/lib/utils";
 
 const MOODS = [
   { value: "radieux", label: "Radieux", emoji: "🌟" },
@@ -23,7 +24,7 @@ type MoodType = (typeof MOODS)[number]["value"];
 
 function toOffsetFromToday(dateStr: string): number {
   const today = new Date();
-  const target = new Date(dateStr);
+  const target = parseLocalDate(dateStr);
   today.setHours(0, 0, 0, 0);
   target.setHours(0, 0, 0, 0);
   const diffDays = Math.round((today.getTime() - target.getTime()) / 86_400_000);
@@ -260,7 +261,7 @@ export default function Journal() {
                   }}
                   className="w-full text-left rounded-2xl shadow-sm border border-border p-4 space-y-2 transition-all duration-200 hover:bg-accent/30"
                 >
-                  <p className="text-lg font-medium">{format(new Date(h.date), "EEEE d MMMM", { locale: fr })}</p>
+                  <p className="text-lg font-medium">{format(parseLocalDate(h.date), "EEEE d MMMM", { locale: fr })}</p>
                   <p className="text-sm text-muted-foreground">
                     {moodMeta ? `${moodMeta.emoji} ${moodMeta.label}` : "Humeur non renseignée"}
                   </p>
@@ -292,7 +293,7 @@ export default function Journal() {
           {selectedHistoryEntry && (
             <div className="space-y-4">
               <SheetHeader>
-                <SheetTitle>{format(new Date(selectedHistoryEntry.date), "EEEE d MMMM", { locale: fr })}</SheetTitle>
+                <SheetTitle>{format(parseLocalDate(selectedHistoryEntry.date), "EEEE d MMMM", { locale: fr })}</SheetTitle>
                 <p className="text-sm text-muted-foreground">
                   {MOODS.find((m) => m.value === selectedHistoryEntry.mood)?.emoji ?? "😐"}{" "}
                   {MOODS.find((m) => m.value === selectedHistoryEntry.mood)?.label ?? "Humeur"}

@@ -6,6 +6,7 @@ import { format, startOfMonth, endOfMonth, getDay, getDaysInMonth, subMonths, ad
 import { fr } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { parseLocalDate } from "@/lib/utils";
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -114,7 +115,7 @@ export function ActivityHeatmap() {
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
-                <p className="font-medium">{format(new Date(cell.date), "d MMMM yyyy", { locale: fr })}</p>
+                <p className="font-medium">{format(parseLocalDate(cell.date), "d MMMM yyyy", { locale: fr })}</p>
                 {active ? (
                   <p>{sessions} séance{sessions > 1 ? "s" : ""}</p>
                 ) : (

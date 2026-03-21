@@ -18,10 +18,11 @@ export function useBodyMetrics(days = 30) {
     queryFn: async () => {
       const since = new Date();
       since.setDate(since.getDate() - days);
+      const sinceStr = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, "0")}-${String(since.getDate()).padStart(2, "0")}`;
       const { data, error } = await supabase
         .from("body_metrics")
         .select("*")
-        .gte("date", since.toISOString().split("T")[0])
+        .gte("date", sinceStr)
         .order("date", { ascending: true });
       if (error) throw error;
       return (data ?? []) as BodyMetricRow[];

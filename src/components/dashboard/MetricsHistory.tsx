@@ -6,6 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { parseLocalDate } from "@/lib/utils";
 
 export function MetricsHistory() {
   const { data: metrics = [] } = useHealthMetrics(30);
@@ -34,7 +35,7 @@ export function MetricsHistory() {
               <tbody>
                 {sorted.slice(0, 50).map((m) => (
                   <tr key={m.id} className="border-b border-border/50 hover:bg-secondary/20">
-                    <td className="py-2 px-3 text-foreground">{format(new Date(m.date), "dd/MM/yyyy")}</td>
+                    <td className="py-2 px-3 text-foreground">{format(parseLocalDate(m.date), "dd/MM/yyyy")}</td>
                     <td className="py-2 px-3 text-foreground uppercase text-xs font-medium">{m.metric_type}</td>
                     <td className="py-2 px-3 text-right text-foreground">{m.value.toFixed(1)}</td>
                     <td className="py-2 px-3 text-right text-muted-foreground">{m.unit}</td>

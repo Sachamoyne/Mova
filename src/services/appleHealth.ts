@@ -1,5 +1,5 @@
 import { Health } from "@capgo/capacitor-health";
-import { requestHealthPermissions, fetchHealthData } from "./health";
+import { requestHealthPermissions, fetchHealthData, toLocalDateStr } from "./health";
 import type { HealthSample, SleepSample } from "./health";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
@@ -232,7 +232,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
 
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - 60);
-  const sinceDateStr = sinceDate.toISOString().split("T")[0];
+  const sinceDateStr = toLocalDateStr(sinceDate.toISOString());
 
   let importedHrv        = 0;
   let importedRhr        = 0;

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+import { parseLocalDate } from "@/lib/utils";
 
 export interface BodyMetricsSyncStatus {
   lastSyncDate: string | null;
@@ -26,7 +27,7 @@ export function useBodyMetricsSyncStatus() {
         return { lastSyncDate: null, label: "Jamais synchronisé" };
       }
 
-      const lastDate = new Date(data[0].date);
+      const lastDate = parseLocalDate(data[0].date);
       const now = new Date();
       const diffDays = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
 

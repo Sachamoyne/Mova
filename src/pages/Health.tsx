@@ -3,6 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { format } from "date-fns";
+import { parseLocalDate } from "@/lib/utils";
 
 export default function Health() {
   const { data: metrics = [] } = useHealthMetrics(30);
@@ -17,7 +18,7 @@ export default function Health() {
   const chartData = Object.entries(byDate)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, vals]) => ({
-      date: format(new Date(date), "dd/MM"),
+      date: format(parseLocalDate(date), "dd/MM"),
       hrv: vals.hrv,
       sleep_score: vals.sleep_score,
       rhr: vals.rhr,
@@ -66,7 +67,7 @@ export default function Health() {
           <tbody>
             {metrics.slice(0, 50).map((m) => (
               <tr key={m.id} className="border-b border-border/50 hover:bg-secondary/20">
-                <td className="py-2 px-3 text-foreground">{format(new Date(m.date), "dd/MM/yyyy")}</td>
+                <td className="py-2 px-3 text-foreground">{format(parseLocalDate(m.date), "dd/MM/yyyy")}</td>
                 <td className="py-2 px-3 text-foreground uppercase text-xs font-medium">{m.metric_type}</td>
                 <td className="py-2 px-3 text-right text-foreground">{m.value.toFixed(1)}</td>
                 <td className="py-2 px-3 text-right text-muted-foreground">{m.unit}</td>

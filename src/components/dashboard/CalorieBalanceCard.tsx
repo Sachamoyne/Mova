@@ -4,26 +4,29 @@ import { BarChart, Bar, Cell, ResponsiveContainer, XAxis, Tooltip, ReferenceLine
 import { Scale } from "lucide-react";
 import { addDays, format, subDays } from "date-fns";
 import { fr } from "date-fns/locale";
+import { parseLocalDate } from "@/lib/utils";
 
 function useCalorieBalance(days = 14, date?: string) {
   return useQuery({
     queryKey: ["calorie_balance", days, date],
     queryFn: async () => {
-      const targetDate = date ? new Date(date) : new Date();
+      const targetDate = date ? parseLocalDate(date) : new Date();
       const start = date ? subDays(targetDate, 7) : subDays(targetDate, days);
       const end = date ? addDays(targetDate, 7) : targetDate;
+      const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+      const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
 
       const { data } = await supabase
         .from("health_metrics")
         .select("date, value")
         .eq("metric_type", "calorie_balance")
-        .gte("date", start.toISOString().split("T")[0])
-        .lte("date", end.toISOString().split("T")[0])
+        .gte("date", startStr)
+        .lte("date", endStr)
         .order("date", { ascending: true });
 
       return (data ?? []).map((d) => ({
         date: d.date,
-        label: format(new Date(d.date), "dd", { locale: fr }),
+        label: format(parseLocalDate(d.date), "dd MMM", { locale: fr }),
         value: Math.round(d.value),
       }));
     },

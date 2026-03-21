@@ -19,6 +19,14 @@ import { Health } from "@capgo/capacitor-health";
 import type { Workout } from "@capgo/capacitor-health/dist/esm/definitions";
 import { NutritionPlugin } from "@/plugins/nutritionPlugin";
 
+export function toLocalDateStr(isoString: string): string {
+  const d = new Date(isoString);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // ─── Diagnostic au chargement ────────────────────────────────────────────────
 if (!Health) {
   console.error(
@@ -100,9 +108,9 @@ function sleepNightDate(isoDate: string): string {
   // Si l'heure de fin est avant 14h, on attribue à cette date (nuit précédente)
   // Sinon à la date courante
   if (d.getHours() < 14) {
-    return d.toISOString().split("T")[0];
+    return toLocalDateStr(isoDate);
   }
-  return d.toISOString().split("T")[0];
+  return toLocalDateStr(isoDate);
 }
 
 /** Regroupe les échantillons par jour et calcule la moyenne journalière. */
@@ -327,7 +335,7 @@ async function fetchSamples(dataType: string, days: number): Promise<HealthSampl
     });
     return (result.samples ?? [])
       .map((s) => {
-        const date = new Date(s.startDate).toISOString().split("T")[0];
+        const date = toLocalDateStr(s.startDate);
         let value = Number(s.value);
         let unit = s.unit ?? "";
 
@@ -388,7 +396,7 @@ async function fetchDailySteps(days: number): Promise<HealthSample[]> {
     });
     const samples: HealthSample[] = (result.samples ?? [])
       .map((s: any) => ({
-        date:  s.startDate.split("T")[0],
+        date:  toLocalDateStr(s.startDate),
         value: Math.round(Number(s.value)),
         unit:  "count",
       }))
@@ -420,7 +428,7 @@ async function fetchDailyCalories(days: number): Promise<HealthSample[]> {
       });
       return (result.samples ?? [])
         .map((s: any) => ({
-          date:  s.startDate.split("T")[0],
+          date:  toLocalDateStr(s.startDate),
           value: Math.round(Number(s.value)),
           unit:  "kcal",
         }))
@@ -455,7 +463,7 @@ async function fetchDietaryProtein(days: number): Promise<HealthSample[]> {
     const result = await NutritionPlugin.queryDietaryProtein({ days });
     const samples = (result.samples ?? [])
       .map((s) => ({
-        date: s.startDate.split("T")[0],
+        date: toLocalDateStr(s.startDate),
         value: Number(s.value),
         unit: "g" as string,
       }))
@@ -491,7 +499,7 @@ async function fetchBodyFat(days: number): Promise<HealthSample[]> {
           ? Math.round(raw * 10000) / 100
           : Math.round(raw * 10) / 10;
         return {
-          date:  s.startDate.split("T")[0],
+          date:  toLocalDateStr(s.startDate),
           value,
           unit:  "%",
         };
@@ -530,7 +538,7 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
       mapped++;
       out.push({
         startTime: w.startDate,
-        date: new Date(w.startDate).toISOString().split("T")[0],
+        date: toLocalDateStr(w.startDate),
         sportType,
         durationSec: Math.round(w.duration),
         calories: w.totalEnergyBurned,
@@ -607,7 +615,7 @@ function generateDemoData(days: number): HealthSnapshot {
       const d = new Date();
       d.setDate(d.getDate() - (days - 1 - i));
       return {
-        date:  d.toISOString().split("T")[0],
+        date:  toLocalDateStr(d.toISOString()),
         value: Math.round((base + (Math.random() - 0.5) * variance) * 10) / 10,
         unit,
       };
@@ -617,14 +625,14 @@ function generateDemoData(days: number): HealthSnapshot {
     Array.from({ length: days }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (days - 1 - i));
-      return { date: d.toISOString().split("T")[0], value: genValue(), unit };
+      return { date: toLocalDateStr(d.toISOString()), value: genValue(), unit };
     });
 
   const sleepDemo: SleepSample[] = Array.from({ length: days }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (days - 1 - i));
     return {
-      date:        d.toISOString().split("T")[0],
+      date:        toLocalDateStr(d.toISOString()),
       state:       "asleep",
       durationMin: Math.round(390 + Math.random() * 150), // ~6.5h–9h
     };
