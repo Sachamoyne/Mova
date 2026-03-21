@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   format,
   startOfMonth,
@@ -181,7 +181,6 @@ export default function Strength() {
     ? workoutSessions.find((s) => s.activity_id === selectedActivity.id)
     : undefined;
   const linkedSessionId = linkedSession?.id ?? null;
-  const hasExercises = !!(linkedSession?.workout_sets && linkedSession.workout_sets.length > 0);
 
   const progressionCards = useMemo(() => {
     return PROGRESSION_EXERCISES.map((exerciseName) => {
@@ -227,15 +226,6 @@ export default function Strength() {
 
     const activity = appleActivities.find((a) => a.start_time.slice(0, 10) === payload.date);
     if (activity) setSelectedActivity(activity);
-  };
-
-  const handleOpenLogbook = async (activityId: string) => {
-    try {
-      const sessionId = await getOrCreateSessionForActivity.mutateAsync(activityId);
-      setActiveSessionId(sessionId);
-    } catch (e) {
-      toast.error((e as Error).message || "Impossible d'ouvrir la séance");
-    }
   };
 
   return (
@@ -341,17 +331,12 @@ export default function Strength() {
             <DetailStat icon={<Flame className="h-4 w-4 text-strength" />} label="Calories" value={selectedActivity.calories ? `${selectedActivity.calories} kcal` : "—"} />
           </div>
 
-          {(activeSessionId && (!linkedSessionId || activeSessionId === linkedSessionId)) ? (
-            <LogbookView sessionId={activeSessionId} onClose={() => setActiveSessionId(null)} />
-          ) : (
-            <button
-              onClick={() => handleOpenLogbook(selectedActivity.id)}
-              className="text-sm font-medium px-4 py-2 rounded-lg"
-              style={{ backgroundColor: "hsl(var(--strength))", color: "white" }}
-            >
-              {hasExercises ? "Modifier les exercices" : "+ Ajouter les exercices"}
-            </button>
-          )}
+          <LogbookView
+            sessionId={linkedSessionId ?? "__pending__"}
+            activityId={selectedActivity.id}
+            onSessionCreated={(id) => setActiveSessionId(id)}
+            onClose={() => setActiveSessionId(null)}
+          />
         </div>
       )}
 
@@ -386,17 +371,41 @@ export default function Strength() {
   );
 }
 
-function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+function LogbookView({
+  sessionId,
+  activityId,
+  onSessionCreated,
+  onClose,
+}: {
+  sessionId: string;
+  activityId: string;
+  onSessionCreated: (id: string) => void;
+  onClose: () => void;
+}) {
   const { data: workoutSessions = [] } = useWorkoutSessions();
   const addSet = useAddWorkoutSet();
   const deleteSet = useDeleteWorkoutSet();
+  const getOrCreateSessionForActivity = useGetOrCreateSessionForActivity();
+  void onClose;
 
   const [exerciseDrawerOpen, setExerciseDrawerOpen] = useState(false);
   const [customExercise, setCustomExercise] = useState("");
   const [localExercises, setLocalExercises] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, ExerciseDraft>>({});
+  const [resolvedSessionId, setResolvedSessionId] = useState<string | null>(
+    sessionId !== "__pending__" ? sessionId : null
+  );
 
-  const session = workoutSessions.find((s) => s.id === sessionId) ?? null;
+  useEffect(() => {
+    if (sessionId !== "__pending__") {
+      setResolvedSessionId(sessionId);
+    }
+  }, [sessionId]);
+
+  const effectiveSessionId = sessionId === "__pending__" ? resolvedSessionId : sessionId;
+  const session = effectiveSessionId
+    ? workoutSessions.find((s) => s.id === effectiveSessionId) ?? null
+    : null;
   const sets = (session?.workout_sets ?? []) as WorkoutSetRow[];
 
   const groupedExercises = useMemo(() => {
@@ -450,15 +459,33 @@ function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () =>
     }));
   };
 
-  const handleAddExercise = (exerciseNameRaw: string) => {
+  const ensureSessionId = async () => {
+    if (effectiveSessionId) return effectiveSessionId;
+    const created = await getOrCreateSessionForActivity.mutateAsync(activityId);
+    setResolvedSessionId(created);
+    onSessionCreated(created);
+    return created;
+  };
+
+  const handleAddExercise = async (exerciseNameRaw: string) => {
     const exerciseName = exerciseNameRaw.trim();
     if (!exerciseName) return;
+    try {
+      await ensureSessionId();
+    } catch (e) {
+      toast.error((e as Error).message || "Impossible de créer la séance");
+      return;
+    }
     setLocalExercises((prev) => (prev.includes(exerciseName) ? prev : [...prev, exerciseName]));
     setExerciseDrawerOpen(false);
     setCustomExercise("");
   };
 
   const handleAddSet = (exerciseName: string, existingCount: number) => {
+    if (!effectiveSessionId) {
+      toast.error("Séance indisponible");
+      return;
+    }
     const reps = Number(drafts[exerciseName]?.reps ?? 0);
     const weight = Number((drafts[exerciseName]?.weight ?? "").replace(",", "."));
 
@@ -473,7 +500,7 @@ function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () =>
 
     addSet.mutate(
       {
-        session_id: sessionId,
+        session_id: effectiveSessionId,
         exercise_name: exerciseName,
         set_number: existingCount + 1,
         reps,
@@ -507,8 +534,8 @@ function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () =>
         groupedExercises.map(({ exerciseName, sets: exSets }) => (
           <ExerciseLogbookBlock
             key={exerciseName}
-            sessionId={sessionId}
-            sessionDate={session.date}
+            sessionId={effectiveSessionId ?? "__pending__"}
+            sessionDate={session?.date ?? new Date().toISOString().slice(0, 10)}
             exerciseName={exerciseName}
             sets={exSets}
             draft={drafts[exerciseName]}
@@ -537,7 +564,7 @@ function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () =>
               {FREQUENT_EXERCISES.map((ex) => (
                 <button
                   key={ex}
-                  onClick={() => handleAddExercise(ex)}
+                  onClick={() => { void handleAddExercise(ex); }}
                   className="px-3 py-1.5 text-xs rounded-md bg-secondary text-foreground hover:bg-secondary/80 transition-colors"
                 >
                   {ex}
@@ -552,7 +579,7 @@ function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () =>
                 className="bg-secondary border-border"
                 placeholder="Ex: Rowing barre"
               />
-              <Button onClick={() => handleAddExercise(customExercise)} style={{ backgroundColor: "hsl(var(--strength))" }} className="text-white">
+              <Button onClick={() => { void handleAddExercise(customExercise); }} style={{ backgroundColor: "hsl(var(--strength))" }} className="text-white">
                 Ajouter
               </Button>
             </div>
@@ -565,9 +592,6 @@ function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () =>
         </DrawerContent>
       </Drawer>
 
-      <Button onClick={onClose} style={{ backgroundColor: "hsl(var(--strength))" }} className="text-white">
-        Terminer
-      </Button>
     </div>
   );
 }
