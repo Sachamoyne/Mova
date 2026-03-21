@@ -253,6 +253,39 @@ export type Database = {
         }
         Relationships: []
       }
+      running_records: {
+        Row: {
+          created_at: string
+          date: string | null
+          distance_label: string
+          id: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string | null
+          distance_label: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          date?: string | null
+          distance_label?: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+          value?: string
+        }
+        Relationships: []
+      }
       sleep_logs: {
         Row: {
           bedtime: string | null

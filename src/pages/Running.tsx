@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useActivities } from "@/hooks/useActivities";
+import { useRunningRecords, useUpsertRunningRecord } from "@/hooks/useRunningRecords";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -11,13 +12,34 @@ import {
   eachDayOfInterval, eachMonthOfInterval,
 } from "date-fns";
 import { fr } from "date-fns/locale";
-import { MapPin, Mountain, Wind, TrendingUp, TrendingDown, Clock, ArrowUp, Footprints, ChevronRight } from "lucide-react";
+import { MapPin, Mountain, Wind, TrendingUp, TrendingDown, Clock, ArrowUp, Footprints, ChevronRight, Trophy, Pencil } from "lucide-react";
 import { computePace } from "@/lib/garmin-utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Drawer, DrawerClose, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 type Period = "week" | "month" | "year";
 
 const periodLabels: Record<Period, string> = { week: "Semaine", month: "Mois", year: "Année" };
+
+type RunningRecordKey = "5km" | "10km" | "Semi" | "Marathon" | "Plus longue";
+
+const RECORD_DEFS: { key: RunningRecordKey; label: string; kind: "time" | "distance" }[] = [
+  { key: "5km", label: "5 km", kind: "time" },
+  { key: "10km", label: "10 km", kind: "time" },
+  { key: "Semi", label: "Semi-marathon", kind: "time" },
+  { key: "Marathon", label: "Marathon", kind: "time" },
+  { key: "Plus longue", label: "Plus longue course", kind: "distance" },
+];
+
+function isValidTimeRecord(v: string) {
+  const trimmed = v.trim();
+  return /^(\d{1,2}:)?[0-5]\d:[0-5]\d$/.test(trimmed);
+}
 
 function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   return (
@@ -50,10 +72,17 @@ type ChartEntry = {
 
 export default function Running() {
   const { data: allRuns = [] } = useActivities("running");
+  const { data: records = [] } = useRunningRecords();
+  const upsertRecord = useUpsertRunningRecord();
   const [period, setPeriod] = useState<Period>("month");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // 0-11 for year view
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [recordOpen, setRecordOpen] = useState(false);
+  const [activeRecord, setActiveRecord] = useState<{ key: RunningRecordKey; label: string; kind: "time" | "distance" } | null>(null);
+  const [recordValue, setRecordValue] = useState("");
+  const [recordDate, setRecordDate] = useState("");
+  const [recordNotes, setRecordNotes] = useState("");
 
   const handlePeriodChange = (p: Period) => {
     setPeriod(p);
@@ -202,6 +231,62 @@ export default function Running() {
     } else if (payload.id) {
       setSelectedRunId(payload.id);
     }
+  };
+
+  const openRecordEditor = (def: { key: RunningRecordKey; label: string; kind: "time" | "distance" }) => {
+    const current = records.find((r) => r.distance_label === def.key);
+    setActiveRecord(def);
+    if (def.kind === "distance") {
+      const numeric = Number(String(current?.value ?? "").replace(/[^\d.,]/g, "").replace(",", "."));
+      setRecordValue(Number.isFinite(numeric) && numeric > 0 ? String(numeric) : "");
+    } else {
+      setRecordValue(current?.value ?? "");
+    }
+    setRecordDate(current?.date ?? "");
+    setRecordNotes(current?.notes ?? "");
+    setRecordOpen(true);
+  };
+
+  const handleSaveRecord = () => {
+    if (!activeRecord) return;
+    const rawValue = recordValue.trim();
+    if (!rawValue) {
+      toast.error(activeRecord.kind === "distance" ? "Distance obligatoire" : "Temps obligatoire");
+      return;
+    }
+
+    let normalizedValue = rawValue;
+    if (activeRecord.kind === "time") {
+      if (!isValidTimeRecord(rawValue)) {
+        toast.error("Format temps invalide (MM:SS ou HH:MM:SS)");
+        return;
+      }
+    } else {
+      const km = Number(rawValue.replace(",", "."));
+      if (!Number.isFinite(km) || km <= 0) {
+        toast.error("Distance invalide");
+        return;
+      }
+      normalizedValue = `${Math.round(km * 10) / 10} km`;
+    }
+
+    upsertRecord.mutate(
+      {
+        distance_label: activeRecord.key,
+        value: normalizedValue,
+        date: recordDate || null,
+        notes: recordNotes.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Record enregistré");
+          setRecordOpen(false);
+        },
+        onError: (e) => {
+          toast.error((e as Error).message || "Impossible d'enregistrer le record");
+        },
+      }
+    );
   };
 
   return (
@@ -365,6 +450,99 @@ export default function Running() {
           Sélectionnez une activité sur le graphique pour voir les détails
         </div>
       )}
+
+      <div className="glass-card p-5 border-l-4 border-running">
+        <div className="flex items-center gap-2 mb-4">
+          <Trophy className="h-4 w-4 text-running" />
+          <h3 className="font-display font-semibold text-foreground">Records personnels</h3>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {RECORD_DEFS.map((def) => {
+            const rec = records.find((r) => r.distance_label === def.key);
+            return (
+              <div key={def.key} className="rounded-xl border border-border p-3 bg-card/40">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Trophy className="h-3.5 w-3.5 text-running shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate">{def.label}</span>
+                  </div>
+                  <Drawer open={recordOpen && activeRecord?.key === def.key} onOpenChange={(open) => {
+                    setRecordOpen(open);
+                    if (!open) setActiveRecord(null);
+                  }}>
+                    <DrawerTrigger asChild>
+                      <button
+                        onClick={() => openRecordEditor(def)}
+                        className="h-6 w-6 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </DrawerTrigger>
+                    <DrawerContent className="bg-card border-border">
+                      <DrawerHeader>
+                        <DrawerTitle className="font-display text-foreground">Modifier {def.label}</DrawerTitle>
+                      </DrawerHeader>
+                      <div className="px-4 space-y-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">{def.kind === "distance" ? "Distance (km)" : "Temps"}</Label>
+                          <Input
+                            type={def.kind === "distance" ? "number" : "text"}
+                            step={def.kind === "distance" ? "0.1" : undefined}
+                            placeholder={def.kind === "distance" ? "34.2" : "22:34 ou 01:22:34"}
+                            value={recordValue}
+                            onChange={(e) => setRecordValue(e.target.value)}
+                            className="bg-secondary border-border"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Date</Label>
+                          <Input
+                            type="date"
+                            value={recordDate}
+                            onChange={(e) => setRecordDate(e.target.value)}
+                            className="bg-secondary border-border"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground">Notes (optionnel)</Label>
+                          <Textarea
+                            value={recordNotes}
+                            onChange={(e) => setRecordNotes(e.target.value)}
+                            className="bg-secondary border-border min-h-[80px]"
+                          />
+                        </div>
+                      </div>
+                      <DrawerFooter>
+                        <Button
+                          onClick={handleSaveRecord}
+                          disabled={upsertRecord.isPending}
+                          style={{ backgroundColor: "hsl(16, 90%, 55%)" }}
+                          className="text-white"
+                        >
+                          {upsertRecord.isPending ? "Enregistrement..." : "Enregistrer"}
+                        </Button>
+                        <DrawerClose asChild>
+                          <Button variant="ghost">Annuler</Button>
+                        </DrawerClose>
+                      </DrawerFooter>
+                    </DrawerContent>
+                  </Drawer>
+                </div>
+
+                <div className="text-lg font-display font-bold text-foreground">
+                  {rec?.value ?? "—"}
+                </div>
+                {rec?.date && (
+                  <div className="text-[10px] text-muted-foreground mt-1">
+                    {format(new Date(rec.date), "d MMM yyyy", { locale: fr })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
