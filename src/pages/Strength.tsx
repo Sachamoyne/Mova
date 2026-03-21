@@ -1,18 +1,42 @@
 import { useMemo, useState } from "react";
-import { format } from "date-fns";
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  startOfYear,
+  endOfYear,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+} from "date-fns";
 import { fr } from "date-fns/locale";
 import {
   ArrowLeft,
   Check,
   Dumbbell,
+  Flame,
   Minus,
   Plus,
   Scale,
+  Timer,
   Trash2,
   TrendingDown,
   TrendingUp,
+  X,
 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { toast } from "sonner";
 import { useActivities } from "@/hooks/useHealthData";
 import { useLatestBodyMetric, useBodyMetrics } from "@/hooks/useBodyMetrics";
@@ -29,11 +53,21 @@ import { Drawer, DrawerClose, DrawerContent, DrawerFooter, DrawerHeader, DrawerT
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+type Period = "week" | "month" | "year";
 type ExerciseDraft = { reps: string; weight: string; open: boolean };
 
 type LastPerfRow = WorkoutSetRow & {
   workout_sessions?: { date?: string } | { date?: string }[] | null;
 };
+
+type StrengthChartPoint = {
+  label: string;
+  fullLabel: string;
+  date: string;
+  duration: number;
+};
+
+const periodLabels: Record<Period, string> = { week: "Semaine", month: "Mois", year: "Année" };
 
 const FREQUENT_EXERCISES = [
   "Squat",
@@ -58,7 +92,7 @@ const PROGRESSION_EXERCISES = [
 ] as const;
 
 export default function Strength() {
-  const { data: sessions = [] } = useActivities("strength");
+  const { data: appleActivities = [] } = useActivities("strength");
   const { data: latestMetrics = [] } = useLatestBodyMetric();
   const { data: bodyHistory = [] } = useBodyMetrics(30);
   const { data: workoutSessions = [] } = useWorkoutSessions();
@@ -68,6 +102,9 @@ export default function Strength() {
   const getOrCreateSessionForActivity = useGetOrCreateSessionForActivity();
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [period, setPeriod] = useState<Period>("month");
+  const [selectedActivity, setSelectedActivity] = useState<(typeof appleActivities)[number] | null>(null);
+
   const [exerciseDrawerOpen, setExerciseDrawerOpen] = useState(false);
   const [customExercise, setCustomExercise] = useState("");
   const [localExercises, setLocalExercises] = useState<string[]>([]);
@@ -99,17 +136,17 @@ export default function Strength() {
     [workoutSessions, activeSessionId]
   );
 
+  const activeSets = (activeSession?.workout_sets ?? []) as WorkoutSetRow[];
+
   const activityById = useMemo(() => {
-    const map = new Map<string, (typeof sessions)[number]>();
-    for (const activity of sessions) map.set(activity.id, activity);
+    const map = new Map<string, (typeof appleActivities)[number]>();
+    for (const activity of appleActivities) map.set(activity.id, activity);
     return map;
-  }, [sessions]);
+  }, [appleActivities]);
 
   const activeActivity = activeSession?.activity_id
     ? activityById.get(activeSession.activity_id) ?? null
     : null;
-
-  const activeSets = (activeSession?.workout_sets ?? []) as WorkoutSetRow[];
 
   const groupedExercises = useMemo(() => {
     const map = new Map<string, WorkoutSetRow[]>();
@@ -118,8 +155,7 @@ export default function Strength() {
       arr.push(s);
       map.set(s.exercise_name, arr);
     }
-    const fromSets = Array.from(map.keys());
-    const merged = [...fromSets];
+    const merged = [...Array.from(map.keys())];
     for (const e of localExercises) {
       if (!merged.includes(e)) merged.push(e);
     }
@@ -129,7 +165,7 @@ export default function Strength() {
     }));
   }, [activeSets, localExercises]);
 
-  const historyActivities = sessions.slice(0, 10);
+  const historyActivities = appleActivities.slice(0, 10);
 
   const sessionByActivityId = useMemo(() => {
     const map = new Map<string, (typeof workoutSessions)[number]>();
@@ -138,6 +174,51 @@ export default function Strength() {
     }
     return map;
   }, [workoutSessions]);
+
+  const periodRange = useMemo(() => {
+    const now = new Date();
+    if (period === "week") {
+      return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
+    }
+    if (period === "month") {
+      return { start: startOfMonth(now), end: endOfMonth(now) };
+    }
+    return { start: startOfYear(now), end: endOfYear(now) };
+  }, [period]);
+
+  const chartData: StrengthChartPoint[] = useMemo(() => {
+    if (period === "year") {
+      const months = eachMonthOfInterval({ start: periodRange.start, end: periodRange.end });
+      return months.map((month) => {
+        const duration = appleActivities
+          .filter((a) => {
+            const d = new Date(a.start_time);
+            return d.getFullYear() === month.getFullYear() && d.getMonth() === month.getMonth();
+          })
+          .reduce((sum, a) => sum + (a.duration_sec / 60), 0);
+        return {
+          label: format(month, "MMM", { locale: fr }),
+          fullLabel: format(month, "MMMM yyyy", { locale: fr }),
+          date: format(month, "yyyy-MM-01"),
+          duration: Math.round(duration),
+        };
+      });
+    }
+
+    const days = eachDayOfInterval({ start: periodRange.start, end: periodRange.end });
+    return days.map((day) => {
+      const dayIso = format(day, "yyyy-MM-dd");
+      const duration = appleActivities
+        .filter((a) => a.start_time.slice(0, 10) === dayIso)
+        .reduce((sum, a) => sum + (a.duration_sec / 60), 0);
+      return {
+        label: period === "week" ? format(day, "EEE", { locale: fr }) : format(day, "d"),
+        fullLabel: format(day, "EEEE d MMMM yyyy", { locale: fr }),
+        date: dayIso,
+        duration: Math.round(duration),
+      };
+    });
+  }, [appleActivities, period, periodRange]);
 
   const progressionCards = useMemo(() => {
     return PROGRESSION_EXERCISES.map((exerciseName) => {
@@ -254,6 +335,25 @@ export default function Strength() {
     });
   };
 
+  const handleBarClick = (e: any) => {
+    const payload = e?.activePayload?.[0]?.payload as StrengthChartPoint | undefined;
+    if (!payload || payload.duration <= 0) return;
+
+    if (period === "year") {
+      const year = Number(payload.date.slice(0, 4));
+      const month = Number(payload.date.slice(5, 7)) - 1;
+      const monthActivity = appleActivities.find((a) => {
+        const d = new Date(a.start_time);
+        return d.getFullYear() === year && d.getMonth() === month;
+      });
+      if (monthActivity) setSelectedActivity(monthActivity);
+      return;
+    }
+
+    const activity = appleActivities.find((a) => a.start_time.slice(0, 10) === payload.date);
+    if (activity) setSelectedActivity(activity);
+  };
+
   if (activeSession) {
     return (
       <div className="space-y-4">
@@ -272,11 +372,7 @@ export default function Strength() {
           <div className="text-right">
             <p className="font-display font-semibold text-foreground">Séance Musculation</p>
             <p className="text-xs text-muted-foreground">
-              {format(
-                new Date(`${(activeActivity?.start_time ?? `${activeSession.date}T12:00:00`)}`),
-                "EEEE d MMMM yyyy, HH:mm",
-                { locale: fr }
-              )}
+              {format(new Date(activeActivity?.start_time ?? `${activeSession.date}T12:00:00`), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}
               {activeActivity ? ` · ${Math.round(activeActivity.duration_sec / 60)} min` : ""}
               {activeActivity?.calories ? ` · ${activeActivity.calories} kcal` : ""}
             </p>
@@ -364,25 +460,9 @@ export default function Strength() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricCard
-          label="Poids"
-          value={latest?.weight_kg ? `${latest.weight_kg} kg` : "—"}
-          delta={weightDelta}
-          icon={<Scale className="h-5 w-5 text-strength" />}
-        />
-        <MetricCard
-          label="Masse Grasse"
-          value={latest?.body_fat_pc ? `${latest.body_fat_pc}%` : "—"}
-          delta={fatDelta}
-          invertDelta
-          icon={<TrendingDown className="h-5 w-5 text-destructive" />}
-        />
-        <MetricCard
-          label="Masse Musculaire"
-          value={latest?.muscle_mass_kg ? `${latest.muscle_mass_kg} kg` : "—"}
-          delta={muscleDelta}
-          icon={<Dumbbell className="h-5 w-5 text-strength" />}
-        />
+        <MetricCard label="Poids" value={latest?.weight_kg ? `${latest.weight_kg} kg` : "—"} delta={weightDelta} icon={<Scale className="h-5 w-5 text-strength" />} />
+        <MetricCard label="Masse Grasse" value={latest?.body_fat_pc ? `${latest.body_fat_pc}%` : "—"} delta={fatDelta} invertDelta icon={<TrendingDown className="h-5 w-5 text-destructive" />} />
+        <MetricCard label="Masse Musculaire" value={latest?.muscle_mass_kg ? `${latest.muscle_mass_kg} kg` : "—"} delta={muscleDelta} icon={<Dumbbell className="h-5 w-5 text-strength" />} />
       </div>
 
       {bodyChartData.length > 1 && (
@@ -391,19 +471,60 @@ export default function Strength() {
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={bodyChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => format(new Date(`${v}T12:00:00`), "dd/MM", { locale: fr })}
-              />
+              <XAxis dataKey="date" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => format(new Date(`${v}T12:00:00`), "dd/MM", { locale: fr })} />
               <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} domain={["dataMin - 1", "dataMax + 1"]} />
               <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--foreground))" }} />
               <Line type="monotone" dataKey="Poids" stroke="hsl(var(--strength))" strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="Muscle" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Graphique séances musculation */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-display font-semibold text-foreground">Durée par séance</h2>
+          <PeriodSelector value={period} onChange={setPeriod} />
+        </div>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={chartData} onClick={handleBarClick}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <YAxis tickFormatter={(v) => `${v} min`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+              formatter={(v: number) => [`${Math.round(v)} min`, "Durée"]}
+              labelFormatter={(_, payload) => payload?.[0]?.payload?.fullLabel ?? ""}
+            />
+            <Bar dataKey="duration" radius={[4, 4, 0, 0]} maxBarSize={40}>
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={index}
+                  fill={selectedActivity && entry.date === selectedActivity.start_time?.slice(0, 10)
+                    ? "hsl(0, 70%, 40%)"
+                    : "hsl(var(--strength))"}
+                  fillOpacity={entry.duration > 0 ? 1 : 0}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Détail séance sélectionnée */}
+      {selectedActivity && (
+        <div className="rounded-xl border-2 p-4 relative" style={{ borderColor: "hsl(var(--strength))" }}>
+          <button onClick={() => setSelectedActivity(null)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+          <p className="font-display font-semibold text-foreground mb-3">
+            Détail — {format(new Date(selectedActivity.start_time), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}
+          </p>
+          <div className="flex flex-wrap gap-6">
+            <DetailStat icon={<Timer className="h-4 w-4 text-strength" />} label="Durée" value={`${Math.round(selectedActivity.duration_sec / 60)} min`} />
+            <DetailStat icon={<Flame className="h-4 w-4 text-strength" />} label="Calories" value={selectedActivity.calories ? `${selectedActivity.calories} kcal` : "—"} />
+          </div>
         </div>
       )}
 
@@ -421,12 +542,8 @@ export default function Strength() {
               <div key={activity.id} className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {format(new Date(activity.start_time), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {Math.round(activity.duration_sec / 60)} min · {activity.calories ?? "—"} kcal
-                    </p>
+                    <p className="text-sm font-medium text-foreground">{format(new Date(activity.start_time), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}</p>
+                    <p className="text-xs text-muted-foreground">{Math.round(activity.duration_sec / 60)} min · {activity.calories ?? "—"} kcal</p>
                     <p className={`text-xs mt-1 ${linked ? "text-primary" : "text-muted-foreground"}`}>
                       {linked
                         ? `${exerciseCount} exercices · ${setCount} séries · ${totalKg.toLocaleString()} kg total`
@@ -582,6 +699,38 @@ function ExerciseLogbookBlock({
           Ajouter une serie
         </Button>
       )}
+    </div>
+  );
+}
+
+function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  return (
+    <div className="flex gap-1 rounded-lg bg-secondary p-0.5">
+      {(Object.keys(periodLabels) as Period[]).map((p) => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+            value === p
+              ? "bg-running text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {periodLabels[p]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DetailStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      {icon}
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm font-semibold text-foreground">{value}</p>
+      </div>
     </div>
   );
 }
