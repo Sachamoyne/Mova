@@ -65,6 +65,14 @@ export default function SettingsPage() {
     <div className="space-y-8 max-w-lg">
       <h1 className="text-2xl font-display font-bold text-foreground">Paramètres</h1>
 
+      <div className="rounded-xl border border-border p-4 space-y-1 mb-4">
+        <p className="text-xs text-muted-foreground">Compte connecté</p>
+        <p className="text-sm font-medium">{user?.email ?? "—"}</p>
+        <p className="text-[10px] text-muted-foreground font-mono break-all">
+          ID: {user?.id ?? "—"}
+        </p>
+      </div>
+
       <div className="glass-card p-6 space-y-4">
         <p className="text-sm text-muted-foreground">Connecté en tant que</p>
         <p className="text-foreground font-medium">{user?.email}</p>

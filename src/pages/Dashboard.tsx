@@ -8,7 +8,6 @@ import { WorkoutTodayCard } from "@/components/dashboard/WorkoutTodayCard";
 import { SleepManualCard } from "@/components/dashboard/SleepManualCard";
 import { ManualMetricCard } from "@/components/dashboard/ManualMetricCard";
 import { CalorieBalanceCard } from "@/components/dashboard/CalorieBalanceCard";
-import { HealthChart } from "@/components/dashboard/HealthChart";
 import { WeeklySummary } from "@/components/dashboard/WeeklySummary";
 
 function DateNav({ offset, setOffset }: {
@@ -121,9 +120,6 @@ export default function Dashboard() {
         <CalorieBalanceCard date={selectedDateStr} />
         <WeeklySummary date={selectedDateStr} />
       </div>
-
-      {/* Row 5 : Chart historique */}
-      <HealthChart />
     </div>
   );
 }

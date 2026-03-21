@@ -292,22 +292,17 @@ export async function requestHealthPermissions(): Promise<HealthPermissionResult
     const granted = status.readAuthorized ?? [];
     const denied  = status.readDenied    ?? [];
 
-    if (granted.length === 0) {
-      const isDenied = denied.length > 0;
-      console.warn("[health] Aucun type autorisé. Refus explicite :", isDenied);
+    if (granted.length === 0 && denied.length > 0) {
+      console.warn("[health] Tous les types refusés explicitement");
       console.groupEnd();
       return {
         ok: false,
-        denied: isDenied,
-        granted,
-        deniedTypes: denied,
-        reason: isDenied
-          ? "Merci d'activer l'accès dans Réglages > Santé > Accès aux données > Athletes Ascent."
-          : "Aucun type de données Apple Santé autorisé.",
+        reason: "Accès Apple Santé refusé. Va dans Réglages > Santé > Accès des apps > Athletes Ascent pour autoriser.",
       };
     }
 
-    console.log("[health] ✓ Types autorisés :", granted.join(", "));
+    // Si notDetermined ou partiellement granted → continuer quand même
+    console.log("[health] Continuer malgré granted partiel:", granted, "denied:", denied);
     console.groupEnd();
     return { ok: true, granted, deniedTypes: denied };
 

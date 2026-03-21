@@ -111,6 +111,48 @@ function computeSleepScores(
  */
 export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncResult> {
   console.info("[appleHealth] Starting sync for user", userId);
+  const platform = (() => {
+    try { return (window as any).Capacitor?.getPlatform?.() ?? "web"; }
+    catch { return "web"; }
+  })();
+  if (platform !== "ios" && platform !== "android") {
+    console.info("[appleHealth] Sync ignoré sur browser — platform:", platform);
+    return {
+      importedSamples: 0,
+      importedHrv: 0,
+      importedRhr: 0,
+      importedSleepScore: 0,
+      importedWeight: 0,
+      importedBodyFat: 0,
+      importedWorkouts: 0,
+      importedSleep: 0,
+      importedSteps: 0,
+      importedCalories: 0,
+      importedProtein: 0,
+      fetched: {
+        hrv: 0,
+        restingHR: 0,
+        sleep: 0,
+        weight: 0,
+        bodyFat: 0,
+        workouts: 0,
+        sleepHours: 0,
+        steps: 0,
+        caloriesTotal: 0,
+        protein: 0,
+      },
+      verified: {
+        health_metrics: { hrv: 0, rhr: 0, sleep_score: 0 },
+        body_metrics: { rows: 0 },
+        activities: { rows: 0 },
+      },
+      diagnosticReport: {
+        permissions: { authorized: [], denied: [] },
+        samples: { steps: 0, calories: 0, hrv: 0, sleep: 0, weight: 0 },
+      },
+      lastSync: new Date().toISOString(),
+    } satisfies AppleHealthSyncResult;
+  }
 
   // On synchronise depuis le 1er janvier de l'année courante pour alimenter toutes les vues "Année".
   const now = new Date();
@@ -254,21 +296,11 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
       value:       s.value,
       unit:        "ms",
     }));
-    // Pas de contrainte UNIQUE garantie côté DB → on purge la fenêtre puis on insère
-    const { error: delErr } = await supabase
+    const { error } = await supabase
       .from("health_metrics")
-      .delete()
-      .eq("user_id", userId)
-      .eq("metric_type", "hrv")
-      .gte("date", sinceDateStr);
-    if (delErr) console.warn("[appleHealth] HRV delete warning:", delErr.message);
-
-    const { error } = await supabase.from("health_metrics").insert(rows);
-    if (error) {
-      console.error("[appleHealth] HRV insert error:", error);
-      throw new Error(`HRV sync failed: ${error.message}`);
-    }
-    importedHrv = rows.length;
+      .upsert(rows, { onConflict: "user_id,metric_type,date" });
+    if (error) console.error("[appleHealth] HRV upsert error:", error);
+    else importedHrv = rows.length;
     console.log("[appleHealth] ✓ HRV :", importedHrv);
   }
 
@@ -281,16 +313,10 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
       value:       s.value,
       unit:        "bpm",
     }));
-    const { error: delErr } = await supabase
+    const { error } = await supabase
       .from("health_metrics")
-      .delete()
-      .eq("user_id", userId)
-      .eq("metric_type", "rhr")
-      .gte("date", sinceDateStr);
-    if (delErr) console.warn("[appleHealth] RHR delete warning:", delErr.message);
-
-    const { error } = await supabase.from("health_metrics").insert(rows);
-    if (error) console.error("[appleHealth] RHR insert error:", error);
+      .upsert(rows, { onConflict: "user_id,metric_type,date" });
+    if (error) console.error("[appleHealth] RHR upsert error:", error);
     else importedRhr = rows.length;
     console.log("[appleHealth] ✓ RHR :", importedRhr);
   }
@@ -304,16 +330,10 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
       value:       s.value,
       unit:        "score",
     }));
-    const { error: delErr } = await supabase
+    const { error } = await supabase
       .from("health_metrics")
-      .delete()
-      .eq("user_id", userId)
-      .eq("metric_type", "sleep_score")
-      .gte("date", sinceDateStr);
-    if (delErr) console.warn("[appleHealth] Sleep delete warning:", delErr.message);
-
-    const { error } = await supabase.from("health_metrics").insert(rows);
-    if (error) console.error("[appleHealth] Sleep score insert error:", error);
+      .upsert(rows, { onConflict: "user_id,metric_type,date" });
+    if (error) console.error("[appleHealth] sleep_score upsert error:", error);
     else importedSleepScore = rows.length;
     console.log("[appleHealth] ✓ Sleep score :", importedSleepScore);
   }
@@ -361,16 +381,10 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
       value:       s.value,
       unit:        "g",
     }));
-    const { error: delErr } = await supabase
+    const { error } = await supabase
       .from("health_metrics")
-      .delete()
-      .eq("user_id", userId)
-      .eq("metric_type", "protein")
-      .gte("date", sinceDateStr);
-    if (delErr) console.warn("[appleHealth] protein delete warning:", delErr.message);
-
-    const { error } = await supabase.from("health_metrics").insert(rows);
-    if (error) console.error("[appleHealth] protein insert error:", error);
+      .upsert(rows, { onConflict: "user_id,metric_type,date" });
+    if (error) console.error("[appleHealth] protein upsert error:", error);
     else importedProtein = rows.length;
     console.log("[appleHealth] ✓ Protéines :", importedProtein);
   }
@@ -397,16 +411,11 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
         })
       );
 
-      const { error: delErr } = await supabase
+      const { error } = await supabase
         .from("body_metrics")
-        .delete()
-        .eq("user_id", userId)
-        .gte("date", sinceDateStr);
-      if (delErr) console.warn("[appleHealth] body_metrics delete warning:", delErr.message);
-
-      const { error } = await supabase.from("body_metrics").insert(rows);
+        .upsert(rows, { onConflict: "user_id,date,source" });
       if (error) {
-        console.error("[appleHealth] body_metrics insert error:", error);
+        console.error("[appleHealth] body_metrics upsert error:", error);
       } else {
         importedWeight  = weightByDay.length;
         importedBodyFat = bodyFatByDay.length;

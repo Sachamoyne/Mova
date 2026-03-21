@@ -21,6 +21,8 @@ function useAutoSync() {
       (Date.now() - syncStatus.lastSync.getTime()) > 6 * 60 * 60 * 1000;
 
     if (!shouldSync) return;
+    const plt = (() => { try { return (window as any).Capacitor?.getPlatform?.() ?? "web"; } catch { return "web"; } })();
+    if (plt !== "ios" && plt !== "android") return;
 
     console.log("[autoSync] Démarrage sync automatique...");
 

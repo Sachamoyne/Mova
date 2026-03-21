@@ -15,6 +15,8 @@ export function AppHeader() {
 
   const handleSync = async () => {
     if (!user || isSyncing) return;
+    const plt = (() => { try { return (window as any).Capacitor?.getPlatform?.() ?? "web"; } catch { return "web"; } })();
+    if (plt !== "ios" && plt !== "android") return;
     setIsSyncing(true);
     try {
       await syncAppleHealth(user.id);
