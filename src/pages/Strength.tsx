@@ -12,7 +12,6 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
-  ArrowLeft,
   Check,
   Dumbbell,
   Flame,
@@ -49,7 +48,15 @@ import {
   type WorkoutSetRow,
 } from "@/hooks/useWorkoutSessions";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerClose, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -96,19 +103,11 @@ export default function Strength() {
   const { data: latestMetrics = [] } = useLatestBodyMetric();
   const { data: bodyHistory = [] } = useBodyMetrics(30);
   const { data: workoutSessions = [] } = useWorkoutSessions();
-
-  const addSet = useAddWorkoutSet();
-  const deleteSet = useDeleteWorkoutSet();
   const getOrCreateSessionForActivity = useGetOrCreateSessionForActivity();
 
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("month");
   const [selectedActivity, setSelectedActivity] = useState<(typeof appleActivities)[number] | null>(null);
-
-  const [exerciseDrawerOpen, setExerciseDrawerOpen] = useState(false);
-  const [customExercise, setCustomExercise] = useState("");
-  const [localExercises, setLocalExercises] = useState<string[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, ExerciseDraft>>({});
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const latest = latestMetrics[0];
   const previous = latestMetrics[1];
@@ -131,50 +130,6 @@ export default function Strength() {
       Muscle: m.muscle_mass_kg,
     }));
 
-  const activeSession = useMemo(
-    () => workoutSessions.find((s) => s.id === activeSessionId) ?? null,
-    [workoutSessions, activeSessionId]
-  );
-
-  const activeSets = (activeSession?.workout_sets ?? []) as WorkoutSetRow[];
-
-  const activityById = useMemo(() => {
-    const map = new Map<string, (typeof appleActivities)[number]>();
-    for (const activity of appleActivities) map.set(activity.id, activity);
-    return map;
-  }, [appleActivities]);
-
-  const activeActivity = activeSession?.activity_id
-    ? activityById.get(activeSession.activity_id) ?? null
-    : null;
-
-  const groupedExercises = useMemo(() => {
-    const map = new Map<string, WorkoutSetRow[]>();
-    for (const s of activeSets) {
-      const arr = map.get(s.exercise_name) ?? [];
-      arr.push(s);
-      map.set(s.exercise_name, arr);
-    }
-    const merged = [...Array.from(map.keys())];
-    for (const e of localExercises) {
-      if (!merged.includes(e)) merged.push(e);
-    }
-    return merged.map((name) => ({
-      exerciseName: name,
-      sets: (map.get(name) ?? []).slice().sort((a, b) => a.set_number - b.set_number),
-    }));
-  }, [activeSets, localExercises]);
-
-  const historyActivities = appleActivities.slice(0, 10);
-
-  const sessionByActivityId = useMemo(() => {
-    const map = new Map<string, (typeof workoutSessions)[number]>();
-    for (const s of workoutSessions) {
-      if (s.activity_id) map.set(s.activity_id, s);
-    }
-    return map;
-  }, [workoutSessions]);
-
   const periodRange = useMemo(() => {
     const now = new Date();
     if (period === "week") {
@@ -196,6 +151,7 @@ export default function Strength() {
             return d.getFullYear() === month.getFullYear() && d.getMonth() === month.getMonth();
           })
           .reduce((sum, a) => sum + (a.duration_sec / 60), 0);
+
         return {
           label: format(month, "MMM", { locale: fr }),
           fullLabel: format(month, "MMMM yyyy", { locale: fr }),
@@ -211,6 +167,7 @@ export default function Strength() {
       const duration = appleActivities
         .filter((a) => a.start_time.slice(0, 10) === dayIso)
         .reduce((sum, a) => sum + (a.duration_sec / 60), 0);
+
       return {
         label: period === "week" ? format(day, "EEE", { locale: fr }) : format(day, "d"),
         fullLabel: format(day, "EEEE d MMMM yyyy", { locale: fr }),
@@ -219,6 +176,12 @@ export default function Strength() {
       };
     });
   }, [appleActivities, period, periodRange]);
+
+  const linkedSession = selectedActivity
+    ? workoutSessions.find((s) => s.activity_id === selectedActivity.id)
+    : undefined;
+  const linkedSessionId = linkedSession?.id ?? null;
+  const hasExercises = !!(linkedSession?.workout_sets && linkedSession.workout_sets.length > 0);
 
   const progressionCards = useMemo(() => {
     return PROGRESSION_EXERCISES.map((exerciseName) => {
@@ -246,6 +209,220 @@ export default function Strength() {
       };
     }).filter((c): c is { exerciseName: string; maxWeight: number; points: { date: string; weight: number; label: string }[] } => c !== null);
   }, [workoutSessions]);
+
+  const handleBarClick = (e: any) => {
+    const payload = e?.activePayload?.[0]?.payload as StrengthChartPoint | undefined;
+    if (!payload || payload.duration <= 0) return;
+
+    if (period === "year") {
+      const year = Number(payload.date.slice(0, 4));
+      const month = Number(payload.date.slice(5, 7)) - 1;
+      const monthActivity = appleActivities.find((a) => {
+        const d = new Date(a.start_time);
+        return d.getFullYear() === year && d.getMonth() === month;
+      });
+      if (monthActivity) setSelectedActivity(monthActivity);
+      return;
+    }
+
+    const activity = appleActivities.find((a) => a.start_time.slice(0, 10) === payload.date);
+    if (activity) setSelectedActivity(activity);
+  };
+
+  const handleOpenLogbook = async (activityId: string) => {
+    try {
+      const sessionId = await getOrCreateSessionForActivity.mutateAsync(activityId);
+      setActiveSessionId(sessionId);
+    } catch (e) {
+      toast.error((e as Error).message || "Impossible d'ouvrir la séance");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-display font-bold text-foreground">Musculation</h1>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <MetricCard
+          label="Poids"
+          value={latest?.weight_kg ? `${latest.weight_kg} kg` : "—"}
+          delta={weightDelta}
+          icon={<Scale className="h-5 w-5 text-strength" />}
+        />
+        <MetricCard
+          label="Masse Grasse"
+          value={latest?.body_fat_pc ? `${latest.body_fat_pc}%` : "—"}
+          delta={fatDelta}
+          invertDelta
+          icon={<TrendingDown className="h-5 w-5 text-destructive" />}
+        />
+        <MetricCard
+          label="Masse Musculaire"
+          value={latest?.muscle_mass_kg ? `${latest.muscle_mass_kg} kg` : "—"}
+          delta={muscleDelta}
+          icon={<Dumbbell className="h-5 w-5 text-strength" />}
+        />
+      </div>
+
+      {bodyChartData.length > 1 && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-display font-semibold text-foreground mb-3">Évolution 30 jours</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={bodyChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => format(new Date(`${v}T12:00:00`), "dd/MM", { locale: fr })}
+              />
+              <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} domain={["dataMin - 1", "dataMax + 1"]} />
+              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--foreground))" }} />
+              <Line type="monotone" dataKey="Poids" stroke="hsl(var(--strength))" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="Muscle" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-display font-semibold text-foreground">
+            Durée par séance
+          </h2>
+          <PeriodSelector value={period} onChange={setPeriod} />
+        </div>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={chartData} onClick={handleBarClick}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <YAxis tickFormatter={(v) => `${v} min`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+              formatter={(v: number) => [`${Math.round(v)} min`, "Durée"]}
+              labelFormatter={(_, payload) => payload?.[0]?.payload?.fullLabel ?? ""}
+            />
+            <Bar dataKey="duration" radius={[4, 4, 0, 0]} maxBarSize={40}>
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={index}
+                  fill={selectedActivity && entry.date === selectedActivity.start_time?.slice(0, 10)
+                    ? "hsl(0, 70%, 40%)"
+                    : "hsl(var(--strength))"}
+                  fillOpacity={entry.duration > 0 ? 1 : 0}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {selectedActivity && (
+        <div className="rounded-xl border-2 p-4 relative" style={{ borderColor: "hsl(var(--strength))" }}>
+          <button
+            onClick={() => {
+              setSelectedActivity(null);
+              setActiveSessionId(null);
+            }}
+            className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <p className="font-display font-semibold text-foreground mb-3">
+            Détail — {format(new Date(selectedActivity.start_time), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}
+          </p>
+
+          <div className="flex flex-wrap gap-6 mb-4">
+            <DetailStat icon={<Timer className="h-4 w-4 text-strength" />} label="Durée" value={`${Math.round(selectedActivity.duration_sec / 60)} min`} />
+            <DetailStat icon={<Flame className="h-4 w-4 text-strength" />} label="Calories" value={selectedActivity.calories ? `${selectedActivity.calories} kcal` : "—"} />
+          </div>
+
+          {(activeSessionId && (!linkedSessionId || activeSessionId === linkedSessionId)) ? (
+            <LogbookView sessionId={activeSessionId} onClose={() => setActiveSessionId(null)} />
+          ) : (
+            <button
+              onClick={() => handleOpenLogbook(selectedActivity.id)}
+              className="text-sm font-medium px-4 py-2 rounded-lg"
+              style={{ backgroundColor: "hsl(var(--strength))", color: "white" }}
+            >
+              {hasExercises ? "Modifier les exercices" : "+ Ajouter les exercices"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {progressionCards.length > 0 && (
+        <div>
+          <h2 className="text-lg font-display font-semibold text-foreground mb-3">Progression</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {progressionCards.map((card) => (
+              <div key={card.exerciseName} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-foreground">{card.exerciseName}</p>
+                  <p className="text-xs text-muted-foreground">Max {card.maxWeight} kg</p>
+                </div>
+                <ResponsiveContainer width="100%" height={110}>
+                  <LineChart data={card.points}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={30} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                      formatter={(v: number) => [`${v} kg`, "Charge max"]}
+                    />
+                    <Line type="monotone" dataKey="weight" stroke="hsl(var(--strength))" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LogbookView({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const { data: workoutSessions = [] } = useWorkoutSessions();
+  const addSet = useAddWorkoutSet();
+  const deleteSet = useDeleteWorkoutSet();
+
+  const [exerciseDrawerOpen, setExerciseDrawerOpen] = useState(false);
+  const [customExercise, setCustomExercise] = useState("");
+  const [localExercises, setLocalExercises] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, ExerciseDraft>>({});
+
+  const session = workoutSessions.find((s) => s.id === sessionId) ?? null;
+  if (!session) {
+    return (
+      <div className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+        Chargement du logbook...
+      </div>
+    );
+  }
+
+  const sets = (session.workout_sets ?? []) as WorkoutSetRow[];
+
+  const groupedExercises = useMemo(() => {
+    const map = new Map<string, WorkoutSetRow[]>();
+    for (const s of sets) {
+      const arr = map.get(s.exercise_name) ?? [];
+      arr.push(s);
+      map.set(s.exercise_name, arr);
+    }
+    const merged = [...Array.from(map.keys())];
+    for (const e of localExercises) {
+      if (!merged.includes(e)) merged.push(e);
+    }
+    return merged.map((name) => ({
+      exerciseName: name,
+      sets: (map.get(name) ?? []).slice().sort((a, b) => a.set_number - b.set_number),
+    }));
+  }, [sets, localExercises]);
 
   const openDraft = (exerciseName: string) => {
     setDrafts((prev) => ({
@@ -281,20 +458,7 @@ export default function Strength() {
     setCustomExercise("");
   };
 
-  const handleOpenLogbook = (activityId: string) => {
-    getOrCreateSessionForActivity.mutate(activityId, {
-      onSuccess: (sessionId) => {
-        setActiveSessionId(sessionId);
-        setLocalExercises([]);
-        setDrafts({});
-      },
-      onError: (e) => toast.error((e as Error).message || "Impossible d'ouvrir la séance"),
-    });
-  };
-
   const handleAddSet = (exerciseName: string, existingCount: number) => {
-    if (!activeSession) return;
-
     const reps = Number(drafts[exerciseName]?.reps ?? 0);
     const weight = Number((drafts[exerciseName]?.weight ?? "").replace(",", "."));
 
@@ -309,7 +473,7 @@ export default function Strength() {
 
     addSet.mutate(
       {
-        session_id: activeSession.id,
+        session_id: sessionId,
         exercise_name: exerciseName,
         set_number: existingCount + 1,
         reps,
@@ -335,268 +499,75 @@ export default function Strength() {
     });
   };
 
-  const handleBarClick = (e: any) => {
-    const payload = e?.activePayload?.[0]?.payload as StrengthChartPoint | undefined;
-    if (!payload || payload.duration <= 0) return;
-
-    if (period === "year") {
-      const year = Number(payload.date.slice(0, 4));
-      const month = Number(payload.date.slice(5, 7)) - 1;
-      const monthActivity = appleActivities.find((a) => {
-        const d = new Date(a.start_time);
-        return d.getFullYear() === year && d.getMonth() === month;
-      });
-      if (monthActivity) setSelectedActivity(monthActivity);
-      return;
-    }
-
-    const activity = appleActivities.find((a) => a.start_time.slice(0, 10) === payload.date);
-    if (activity) setSelectedActivity(activity);
-  };
-
-  if (activeSession) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            onClick={() => {
-              setActiveSessionId(null);
-              setLocalExercises([]);
-              setDrafts({});
-            }}
-            className="h-8 px-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Retour
-          </button>
-          <div className="text-right">
-            <p className="font-display font-semibold text-foreground">Séance Musculation</p>
-            <p className="text-xs text-muted-foreground">
-              {format(new Date(activeActivity?.start_time ?? `${activeSession.date}T12:00:00`), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}
-              {activeActivity ? ` · ${Math.round(activeActivity.duration_sec / 60)} min` : ""}
-              {activeActivity?.calories ? ` · ${activeActivity.calories} kcal` : ""}
-            </p>
-          </div>
-          <Button onClick={() => setActiveSessionId(null)} style={{ backgroundColor: "hsl(var(--strength))" }} className="text-white">
-            Terminer
-          </Button>
-        </div>
-
-        {groupedExercises.length === 0 ? (
-          <div className="glass-card p-6 text-center text-sm text-muted-foreground">
-            Aucun exercice dans cette séance pour l'instant.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {groupedExercises.map(({ exerciseName, sets }) => (
-              <ExerciseLogbookBlock
-                key={exerciseName}
-                sessionId={activeSession.id}
-                sessionDate={activeSession.date}
-                exerciseName={exerciseName}
-                sets={sets}
-                draft={drafts[exerciseName]}
-                onOpenDraft={() => openDraft(exerciseName)}
-                onCloseDraft={() => closeDraft(exerciseName)}
-                onDraftChange={(field, value) => handleDraftChange(exerciseName, field, value)}
-                onAddSet={() => handleAddSet(exerciseName, sets.length)}
-                onDeleteSet={handleDeleteSet}
-              />
-            ))}
-          </div>
-        )}
-
-        <Drawer open={exerciseDrawerOpen} onOpenChange={setExerciseDrawerOpen}>
-          <DrawerTrigger asChild>
-            <Button variant="outline" className="w-full border-border bg-card hover:bg-secondary">
-              <Plus className="h-4 w-4 mr-1" />
-              Ajouter un exercice
-            </Button>
-          </DrawerTrigger>
-          <DrawerContent className="bg-card border-border">
-            <DrawerHeader>
-              <DrawerTitle>Ajouter un exercice</DrawerTitle>
-            </DrawerHeader>
-            <div className="px-4 space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {FREQUENT_EXERCISES.map((ex) => (
-                  <button
-                    key={ex}
-                    onClick={() => handleAddExercise(ex)}
-                    className="px-3 py-1.5 text-xs rounded-md bg-secondary text-foreground hover:bg-secondary/80 transition-colors"
-                  >
-                    {ex}
-                  </button>
-                ))}
-              </div>
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">Autre exercice</Label>
-                <Input
-                  value={customExercise}
-                  onChange={(e) => setCustomExercise(e.target.value)}
-                  className="bg-secondary border-border"
-                  placeholder="Ex: Rowing barre"
-                />
-                <Button onClick={() => handleAddExercise(customExercise)} style={{ backgroundColor: "hsl(var(--strength))" }} className="text-white">
-                  Ajouter
-                </Button>
-              </div>
-            </div>
-            <DrawerFooter>
-              <DrawerClose asChild>
-                <Button variant="ghost">Fermer</Button>
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerContent>
-        </Drawer>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-display font-bold text-foreground">Musculation</h1>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricCard label="Poids" value={latest?.weight_kg ? `${latest.weight_kg} kg` : "—"} delta={weightDelta} icon={<Scale className="h-5 w-5 text-strength" />} />
-        <MetricCard label="Masse Grasse" value={latest?.body_fat_pc ? `${latest.body_fat_pc}%` : "—"} delta={fatDelta} invertDelta icon={<TrendingDown className="h-5 w-5 text-destructive" />} />
-        <MetricCard label="Masse Musculaire" value={latest?.muscle_mass_kg ? `${latest.muscle_mass_kg} kg` : "—"} delta={muscleDelta} icon={<Dumbbell className="h-5 w-5 text-strength" />} />
-      </div>
-
-      {bodyChartData.length > 1 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-display font-semibold text-foreground mb-3">Évolution 30 jours</h2>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={bodyChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => format(new Date(`${v}T12:00:00`), "dd/MM", { locale: fr })} />
-              <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={false} tickLine={false} domain={["dataMin - 1", "dataMax + 1"]} />
-              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--foreground))" }} />
-              <Line type="monotone" dataKey="Poids" stroke="hsl(var(--strength))" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Muscle" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+    <div className="space-y-3">
+      {groupedExercises.length === 0 ? (
+        <div className="rounded-lg border border-border p-3 text-sm text-muted-foreground">Aucun exercice pour cette séance.</div>
+      ) : (
+        groupedExercises.map(({ exerciseName, sets: exSets }) => (
+          <ExerciseLogbookBlock
+            key={exerciseName}
+            sessionId={sessionId}
+            sessionDate={session.date}
+            exerciseName={exerciseName}
+            sets={exSets}
+            draft={drafts[exerciseName]}
+            onOpenDraft={() => openDraft(exerciseName)}
+            onCloseDraft={() => closeDraft(exerciseName)}
+            onDraftChange={(field, value) => handleDraftChange(exerciseName, field, value)}
+            onAddSet={() => handleAddSet(exerciseName, exSets.length)}
+            onDeleteSet={handleDeleteSet}
+          />
+        ))
       )}
 
-      {/* Graphique séances musculation */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-display font-semibold text-foreground">Durée par séance</h2>
-          <PeriodSelector value={period} onChange={setPeriod} />
-        </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} onClick={handleBarClick}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={(v) => `${v} min`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-            <Tooltip
-              contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
-              formatter={(v: number) => [`${Math.round(v)} min`, "Durée"]}
-              labelFormatter={(_, payload) => payload?.[0]?.payload?.fullLabel ?? ""}
-            />
-            <Bar dataKey="duration" radius={[4, 4, 0, 0]} maxBarSize={40}>
-              {chartData.map((entry, index) => (
-                <Cell
-                  key={index}
-                  fill={selectedActivity && entry.date === selectedActivity.start_time?.slice(0, 10)
-                    ? "hsl(0, 70%, 40%)"
-                    : "hsl(var(--strength))"}
-                  fillOpacity={entry.duration > 0 ? 1 : 0}
-                />
+      <Drawer open={exerciseDrawerOpen} onOpenChange={setExerciseDrawerOpen}>
+        <DrawerTrigger asChild>
+          <Button variant="outline" className="w-full border-border bg-card hover:bg-secondary">
+            <Plus className="h-4 w-4 mr-1" />
+            Ajouter un exercice
+          </Button>
+        </DrawerTrigger>
+        <DrawerContent className="bg-card border-border">
+          <DrawerHeader>
+            <DrawerTitle>Ajouter un exercice</DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {FREQUENT_EXERCISES.map((ex) => (
+                <button
+                  key={ex}
+                  onClick={() => handleAddExercise(ex)}
+                  className="px-3 py-1.5 text-xs rounded-md bg-secondary text-foreground hover:bg-secondary/80 transition-colors"
+                >
+                  {ex}
+                </button>
               ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Détail séance sélectionnée */}
-      {selectedActivity && (
-        <div className="rounded-xl border-2 p-4 relative" style={{ borderColor: "hsl(var(--strength))" }}>
-          <button onClick={() => setSelectedActivity(null)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-          </button>
-          <p className="font-display font-semibold text-foreground mb-3">
-            Détail — {format(new Date(selectedActivity.start_time), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}
-          </p>
-          <div className="flex flex-wrap gap-6">
-            <DetailStat icon={<Timer className="h-4 w-4 text-strength" />} label="Durée" value={`${Math.round(selectedActivity.duration_sec / 60)} min`} />
-            <DetailStat icon={<Flame className="h-4 w-4 text-strength" />} label="Calories" value={selectedActivity.calories ? `${selectedActivity.calories} kcal` : "—"} />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Autre exercice</Label>
+              <Input
+                value={customExercise}
+                onChange={(e) => setCustomExercise(e.target.value)}
+                className="bg-secondary border-border"
+                placeholder="Ex: Rowing barre"
+              />
+              <Button onClick={() => handleAddExercise(customExercise)} style={{ backgroundColor: "hsl(var(--strength))" }} className="text-white">
+                Ajouter
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+          <DrawerFooter>
+            <DrawerClose asChild>
+              <Button variant="ghost">Fermer</Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
 
-      <div>
-        <h2 className="text-lg font-display font-semibold text-foreground mb-3">Historique des séances</h2>
-        <div className="space-y-2">
-          {historyActivities.map((activity) => {
-            const linked = sessionByActivityId.get(activity.id);
-            const sets = (linked?.workout_sets ?? []) as WorkoutSetRow[];
-            const exerciseCount = new Set(sets.map((s) => s.exercise_name)).size;
-            const setCount = sets.length;
-            const totalKg = Math.round(sets.reduce((sum, s) => sum + (s.reps * s.weight_kg), 0));
-
-            return (
-              <div key={activity.id} className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{format(new Date(activity.start_time), "EEEE d MMMM yyyy, HH:mm", { locale: fr })}</p>
-                    <p className="text-xs text-muted-foreground">{Math.round(activity.duration_sec / 60)} min · {activity.calories ?? "—"} kcal</p>
-                    <p className={`text-xs mt-1 ${linked ? "text-primary" : "text-muted-foreground"}`}>
-                      {linked
-                        ? `${exerciseCount} exercices · ${setCount} séries · ${totalKg.toLocaleString()} kg total`
-                        : "Aucun exercice enregistré"}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    style={{ backgroundColor: "hsl(var(--strength))" }}
-                    className="text-white"
-                    onClick={() => handleOpenLogbook(activity.id)}
-                    disabled={getOrCreateSessionForActivity.isPending}
-                  >
-                    {linked ? "Modifier" : "Ajouter exercices"}
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-
-          {historyActivities.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">Aucune séance enregistrée</p>
-          )}
-        </div>
-      </div>
-
-      {progressionCards.length > 0 && (
-        <div>
-          <h2 className="text-lg font-display font-semibold text-foreground mb-3">Progression</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {progressionCards.map((card) => (
-              <div key={card.exerciseName} className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-foreground">{card.exerciseName}</p>
-                  <p className="text-xs text-muted-foreground">Max {card.maxWeight} kg</p>
-                </div>
-                <ResponsiveContainer width="100%" height={110}>
-                  <LineChart data={card.points}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={30} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
-                      formatter={(v: number) => [`${v} kg`, "Charge max"]}
-                    />
-                    <Line type="monotone" dataKey="weight" stroke="hsl(var(--strength))" strokeWidth={2} dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <Button onClick={onClose} style={{ backgroundColor: "hsl(var(--strength))" }} className="text-white">
+        Terminer
+      </Button>
     </div>
   );
 }
@@ -696,7 +667,7 @@ function ExerciseLogbookBlock({
       ) : (
         <Button variant="outline" size="sm" className="mt-3" onClick={onOpenDraft}>
           <Plus className="h-3.5 w-3.5 mr-1" />
-          Ajouter une serie
+          Ajouter une série
         </Button>
       )}
     </div>
@@ -765,7 +736,7 @@ function MetricCard({
             : isPositive === false
               ? <TrendingDown className="h-3 w-3" />
               : <Minus className="h-3 w-3" />}
-          {parseFloat(delta) > 0 ? "+" : ""}{delta} vs precedent
+          {parseFloat(delta) > 0 ? "+" : ""}{delta} vs précédent
         </div>
       )}
     </div>
