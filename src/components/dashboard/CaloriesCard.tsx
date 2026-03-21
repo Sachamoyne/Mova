@@ -21,7 +21,7 @@ function useLatestNutrition(date?: string) {
       const { data } = await supabase
         .from("health_metrics")
         .select("metric_type, value, date")
-        .in("metric_type", ["calories_total", "protein"])
+        .in("metric_type", ["calories_total", "protein", "carbs", "fat"])
         .eq("date", targetDate)
         .order("date", { ascending: false });
 
@@ -33,6 +33,10 @@ function useLatestNutrition(date?: string) {
         return {
           calories: latest["calories_total"] ?? 0,
           protein: latest["protein"] ?? 0,
+          carbs: latest["carbs"] ?? 0,
+          carbsTarget: 521,
+          fat: latest["fat"] ?? 0,
+          fatTarget: 103,
           caloriesTarget: 3400,
           proteinTarget: 180,
         };
@@ -44,7 +48,7 @@ function useLatestNutrition(date?: string) {
         const { data: fallback } = await supabase
           .from("health_metrics")
           .select("metric_type, value, date")
-          .in("metric_type", ["calories_total", "protein"])
+          .in("metric_type", ["calories_total", "protein", "carbs", "fat"])
           .gte("date", since.toISOString().split("T")[0])
           .order("date", { ascending: false });
 
@@ -55,6 +59,10 @@ function useLatestNutrition(date?: string) {
         return {
           calories: latest["calories_total"] ?? 0,
           protein: latest["protein"] ?? 0,
+          carbs: latest["carbs"] ?? 0,
+          carbsTarget: 521,
+          fat: latest["fat"] ?? 0,
+          fatTarget: 103,
           caloriesTarget: 3400,
           proteinTarget: 180,
         };
@@ -73,6 +81,8 @@ export function CaloriesCard({ date }: { date?: string }) {
   const [dateStr, setDateStr] = useState(new Date().toISOString().split("T")[0]);
   const [manualCalories, setManualCalories] = useState("");
   const [manualProtein, setManualProtein] = useState("");
+  const [manualCarbs, setManualCarbs] = useState("");
+  const [manualFat, setManualFat] = useState("");
 
   useEffect(() => {
     if (date) setDateStr(date);
@@ -84,11 +94,19 @@ export function CaloriesCard({ date }: { date?: string }) {
 
       const caloriesValue = Number(manualCalories);
       const proteinValue = Number(manualProtein);
+      const carbsValue = Number(manualCarbs);
+      const fatValue = Number(manualFat);
       if (!Number.isFinite(caloriesValue) || caloriesValue <= 0) {
         throw new Error("Calories invalides");
       }
       if (!Number.isFinite(proteinValue) || proteinValue <= 0) {
         throw new Error("Protéines invalides");
+      }
+      if (!Number.isFinite(carbsValue) || carbsValue <= 0) {
+        throw new Error("Glucides invalides");
+      }
+      if (!Number.isFinite(fatValue) || fatValue <= 0) {
+        throw new Error("Lipides invalides");
       }
 
       const rows = [
@@ -104,6 +122,20 @@ export function CaloriesCard({ date }: { date?: string }) {
           date: dateStr,
           metric_type: "protein" as const,
           value: Math.round(proteinValue * 10) / 10,
+          unit: "g",
+        },
+        {
+          user_id: user.id,
+          date: dateStr,
+          metric_type: "carbs" as const,
+          value: Math.round(carbsValue * 10) / 10,
+          unit: "g",
+        },
+        {
+          user_id: user.id,
+          date: dateStr,
+          metric_type: "fat" as const,
+          value: Math.round(fatValue * 10) / 10,
           unit: "g",
         },
       ];
@@ -125,6 +157,8 @@ export function CaloriesCard({ date }: { date?: string }) {
       setOpen(false);
       setManualCalories("");
       setManualProtein("");
+      setManualCarbs("");
+      setManualFat("");
     },
     onError: (error) => {
       toast.error((error as Error).message || "Erreur lors de l'enregistrement");
@@ -192,6 +226,26 @@ export function CaloriesCard({ date }: { date?: string }) {
                   placeholder="165"
                 />
               </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Glucides</Label>
+                <Input
+                  type="number"
+                  value={manualCarbs}
+                  onChange={(e) => setManualCarbs(e.target.value)}
+                  className="bg-secondary border-border"
+                  placeholder="500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Lipides</Label>
+                <Input
+                  type="number"
+                  value={manualFat}
+                  onChange={(e) => setManualFat(e.target.value)}
+                  className="bg-secondary border-border"
+                  placeholder="100"
+                />
+              </div>
             </div>
             <DrawerFooter>
               <Button onClick={() => insertMutation.mutate()} disabled={insertMutation.isPending}>
@@ -237,22 +291,66 @@ export function CaloriesCard({ date }: { date?: string }) {
 
         {/* Macros */}
         <div className="flex flex-col gap-2 flex-1 min-w-0">
-          {/* Protéines */}
-          <div>
-            <div className="flex justify-between text-[10px] mb-0.5">
-              <span className="text-muted-foreground">P</span>
-              <span className="text-foreground font-medium">{isLoading ? "—" : protein}
-                <span className="text-muted-foreground">/{proteinTarget}g</span>
-              </span>
+          {/* Macros P / G / L */}
+          <div className="flex flex-col gap-1.5">
+            {/* Protéines */}
+            <div>
+              <div className="flex justify-between text-[11px] mb-0.5">
+                <span className="text-muted-foreground font-medium">P</span>
+                <span className="text-foreground font-medium">
+                  {isLoading ? "—" : protein}
+                  <span className="text-muted-foreground">/{proteinTarget}g</span>
+                </span>
+              </div>
+              <div className="h-1 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(((protein ?? 0) / proteinTarget) * 100, 100)}%`,
+                    backgroundColor: "hsl(217, 91%, 60%)",
+                  }}
+                />
+              </div>
             </div>
-            <div className="h-1 bg-secondary rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min(((protein ?? 0) / proteinTarget) * 100, 100)}%`,
-                  background: "hsl(152, 60%, 48%)",
-                }}
-              />
+
+            {/* Glucides */}
+            <div>
+              <div className="flex justify-between text-[11px] mb-0.5">
+                <span className="text-muted-foreground font-medium">G</span>
+                <span className="text-foreground font-medium">
+                  {isLoading ? "—" : (data?.carbs ?? 0)}
+                  <span className="text-muted-foreground">/{data?.carbsTarget ?? 521}g</span>
+                </span>
+              </div>
+              <div className="h-1 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(((data?.carbs ?? 0) / (data?.carbsTarget ?? 521)) * 100, 100)}%`,
+                    backgroundColor: "hsl(38, 92%, 50%)",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Lipides */}
+            <div>
+              <div className="flex justify-between text-[11px] mb-0.5">
+                <span className="text-muted-foreground font-medium">L</span>
+                <span className="text-foreground font-medium">
+                  {isLoading ? "—" : (data?.fat ?? 0)}
+                  <span className="text-muted-foreground">/{data?.fatTarget ?? 103}g</span>
+                </span>
+              </div>
+              <div className="h-1 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(((data?.fat ?? 0) / (data?.fatTarget ?? 103)) * 100, 100)}%`,
+                    backgroundColor: "hsl(152, 60%, 48%)",
+                  }}
+                />
+              </div>
             </div>
           </div>
 
