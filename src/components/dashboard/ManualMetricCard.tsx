@@ -11,6 +11,7 @@ import { fr } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { useUpsertHealthMetric } from "@/hooks/useUpsertHealthMetric";
+import { usePersistedChartPeriod } from "@/hooks/usePersistedChartPeriod";
 import { Button } from "@/components/ui/button";
 import {
   Drawer, DrawerClose, DrawerContent,
@@ -91,7 +92,7 @@ function useMetricHistory(metricType: ManualMetricType, days: number) {
 export function ManualMetricCard({
   metricType, label, unit, color, icon, targetValue,
 }: ManualMetricCardProps) {
-  const [periodIdx, setPeriodIdx] = useState(0);
+  const [periodIdx, setPeriodIdx] = usePersistedChartPeriod(metricType, PERIODS);
   const [open, setOpen] = useState(false);
   const [dateValue, setDateValue] = useState(todayLocal);
   const [value, setValue] = useState("");

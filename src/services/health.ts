@@ -626,6 +626,8 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
     const workouts = result.workouts ?? [];
     let mapped = 0;
     let unmapped = 0;
+    let activeEnergyCount = 0;
+    let totalEnergyFallbackCount = 0;
     const out: WorkoutData[] = [];
 
     for (const w of workouts) {
@@ -634,13 +636,25 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
         unmapped++;
         continue;
       }
+      const activeEnergy =
+        typeof (w as any).activeEnergyBurned === "number"
+          ? Number((w as any).activeEnergyBurned)
+          : null;
+      const totalEnergy =
+        typeof w.totalEnergyBurned === "number"
+          ? Number(w.totalEnergyBurned)
+          : null;
+      // Préférer activeEnergyBurned pour éviter de compter le repos (SMR) dans "sport".
+      const workoutCalories = activeEnergy ?? totalEnergy ?? undefined;
+      if (activeEnergy != null) activeEnergyCount++;
+      else if (totalEnergy != null) totalEnergyFallbackCount++;
       mapped++;
       out.push({
         startTime: w.startDate,
         date: toLocalDateStr(w.startDate),
         sportType,
         durationSec: Math.round(w.duration),
-        calories: w.totalEnergyBurned,
+        calories: workoutCalories,
         distanceMeters: w.totalDistance,
         elevationGain: typeof (w as any).totalElevation === "number" && (w as any).totalElevation > 0
           ? Math.round((w as any).totalElevation)
@@ -654,6 +668,10 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
     } else {
       console.log("[health] queryWorkouts mapped workouts:", { mapped, total: workouts.length });
     }
+    console.log("[health] queryWorkouts energy source:", {
+      activeEnergyCount,
+      totalEnergyFallbackCount,
+    });
 
     return out;
   } catch (err) {

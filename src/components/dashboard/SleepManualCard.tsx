@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { useInsertSleepLog } from "@/hooks/useSleepLogs";
+import { usePersistedChartPeriod } from "@/hooks/usePersistedChartPeriod";
 import { supabase } from "@/integrations/supabase/client";
 
 const SLEEP_COLOR = "hsl(217, 91%, 60%)";
@@ -119,7 +120,7 @@ function useSleepHistory(days: number) {
 }
 
 export function SleepManualCard({ date }: { date?: string }) {
-  const [periodIdx, setPeriodIdx] = useState(0);
+  const [periodIdx, setPeriodIdx] = usePersistedChartPeriod("sleep", PERIODS);
   const [open, setOpen] = useState(false);
   const [dateValue, setDateValue] = useState(getYesterdayDate);
   const [bedtime, setBedtime] = useState("23:30");

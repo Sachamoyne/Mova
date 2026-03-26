@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -9,6 +9,7 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import type { Database } from "@/integrations/supabase/types";
+import { usePersistedChartPeriod } from "@/hooks/usePersistedChartPeriod";
 
 type MetricType = Database["public"]["Enums"]["metric_type"];
 
@@ -120,7 +121,10 @@ export function KpiCard({
 }: KpiCardProps) {
   const STEPS_GOAL = 10_000;
   const isSteps = metricType === "steps";
-  const [periodIdx, setPeriodIdx] = useState(0);
+  const chartPeriodKey = source === "body_metrics"
+    ? (bodyField ?? metricType)
+    : metricType;
+  const [periodIdx, setPeriodIdx] = usePersistedChartPeriod(chartPeriodKey, PERIODS);
   const period = PERIODS[periodIdx];
   const shouldForceRaw = forceRaw || metricType === "weight";
   const isMonthly = period.days >= 90 && !shouldForceRaw;
