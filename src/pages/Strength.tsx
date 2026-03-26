@@ -13,7 +13,6 @@ import {
 import { fr } from "date-fns/locale";
 import {
   Check,
-  Dumbbell,
   Flame,
   Minus,
   Plus,
@@ -117,9 +116,6 @@ export default function Strength() {
     : null;
   const fatDelta = latest && previous && latest.body_fat_pc && previous.body_fat_pc
     ? (latest.body_fat_pc - previous.body_fat_pc).toFixed(1)
-    : null;
-  const muscleDelta = latest && previous && latest.muscle_mass_kg && previous.muscle_mass_kg
-    ? (latest.muscle_mass_kg - previous.muscle_mass_kg).toFixed(1)
     : null;
 
   const bodyChartData = bodyHistory
@@ -234,7 +230,7 @@ export default function Strength() {
         <h1 className="text-2xl font-display font-bold text-foreground">Musculation</h1>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <MetricCard
           label="Poids"
           value={latest?.weight_kg ? `${latest.weight_kg} kg` : "—"}
@@ -247,12 +243,6 @@ export default function Strength() {
           delta={fatDelta}
           invertDelta
           icon={<TrendingDown className="h-5 w-5 text-destructive" />}
-        />
-        <MetricCard
-          label="Masse Musculaire"
-          value={latest?.muscle_mass_kg ? `${latest.muscle_mass_kg} kg` : "—"}
-          delta={muscleDelta}
-          icon={<Dumbbell className="h-5 w-5 text-strength" />}
         />
       </div>
 

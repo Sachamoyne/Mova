@@ -6,6 +6,13 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Copy, Key, RefreshCw, CheckCircle2, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  getManualEntryReminderSettings,
+  saveManualEntryReminderSettings,
+  syncManualEntryReminderSchedule,
+} from "@/services/manualEntryReminder";
 
 function generateApiKey(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -21,6 +28,9 @@ export default function SettingsPage() {
   const [apiKeyLoading, setApiKeyLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [mockLoading, setMockLoading] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [reminderTime, setReminderTime] = useState("08:00");
+  const [savingReminder, setSavingReminder] = useState(false);
   const queryClient = useQueryClient();
   const isDev = import.meta.env.DEV;
 
@@ -35,6 +45,24 @@ export default function SettingsPage() {
   }, [user]);
 
   useEffect(() => { fetchApiKey(); }, [fetchApiKey]);
+  useEffect(() => {
+    const settings = getManualEntryReminderSettings();
+    setReminderEnabled(settings.enabled);
+    setReminderTime(settings.time);
+  }, []);
+
+  const handleSaveReminder = async () => {
+    setSavingReminder(true);
+    try {
+      const settings = { enabled: reminderEnabled, time: reminderTime };
+      saveManualEntryReminderSettings(settings);
+      await syncManualEntryReminderSchedule(settings, { requestPermissions: true });
+      toast.success("Rappel quotidien enregistré");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Impossible d'enregistrer le rappel");
+    }
+    setSavingReminder(false);
+  };
 
   const handleGenerateKey = async () => {
     if (!user) return;
@@ -77,6 +105,34 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground">Connecté en tant que</p>
         <p className="text-foreground font-medium">{user?.email}</p>
         <Button variant="outline" onClick={handleSignOut}>Se déconnecter</Button>
+      </div>
+
+      <div className="glass-card p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-foreground">Rappel de saisie quotidienne</h2>
+        <p className="text-sm text-muted-foreground">
+          Notification locale chaque matin pour ouvrir la saisie rapide des données.
+        </p>
+        <div className="flex items-center justify-between rounded-lg border border-border p-3">
+          <Label htmlFor="manual-reminder-enabled" className="text-sm">Activer le rappel</Label>
+          <Switch
+            id="manual-reminder-enabled"
+            checked={reminderEnabled}
+            onCheckedChange={setReminderEnabled}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="manual-reminder-time">Heure</Label>
+          <Input
+            id="manual-reminder-time"
+            type="time"
+            value={reminderTime}
+            onChange={(e) => setReminderTime(e.target.value)}
+            disabled={!reminderEnabled}
+          />
+        </div>
+        <Button onClick={handleSaveReminder} disabled={savingReminder}>
+          {savingReminder ? "Enregistrement..." : "Enregistrer le rappel"}
+        </Button>
       </div>
       {/* (Section Sync iPhone & import manuel supprimées) */}
 

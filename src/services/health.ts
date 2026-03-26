@@ -10,7 +10,7 @@
  *   'mindfulness'
  *
  * NOTE: "workout", "activeEnergyBurned", "bodyFatPercentage", "leanBodyMass",
- *       "bmi", "vo2max", "dietaryEnergy" are NOT valid types → they crash the
+ *       "bmi", "vo2max" are NOT valid types → they crash the
  *       native bridge and land in catch → "Impossible de demander l'autorisation".
  *       Workouts are fetched via Health.queryWorkouts() separately.
  */
@@ -73,7 +73,7 @@ export interface HealthSnapshot {
   workouts:      WorkoutData[];
   sleepHours:    HealthSample[];   // non sync (saisie manuelle), conservé pour compatibilité
   steps:         HealthSample[];   // total pas par jour (count)
-  caloriesTotal: HealthSample[];   // calories totales journalières (kcal)
+  caloriesTotal: HealthSample[];   // calories alimentaires consommées / jour (dietaryEnergyConsumed, kcal)
   protein:       HealthSample[];   // protéines journalières (g)
   carbohydrates: HealthSample[];   // glucides journaliers (g)
   fat:           HealthSample[];   // lipides journaliers (g)
@@ -89,6 +89,26 @@ export interface HealthPermissionResult {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function formatErrorDetails(err: unknown): Record<string, unknown> {
+  const e = err as any;
+  if (!e || typeof e !== "object") return { message: String(err) };
+  return {
+    name: e.name,
+    message: e.message,
+    code: e.code,
+    status: e.status ?? e.statusCode,
+    details: e.details,
+    hint: e.hint,
+    cause: e.cause,
+    stack: e.stack,
+  };
+}
+
+function logHealthFetchError(context: string, err: unknown) {
+  const details = formatErrorDetails(err);
+  console.warn(`[health] ${context} failed`, details);
+}
+
 function getPlatform(): "ios" | "android" | "web" {
   try {
     return (window as any).Capacitor?.getPlatform?.() ?? "web";
@@ -101,6 +121,26 @@ function isoRange(days: number): { startDate: string; endDate: string } {
   return {
     startDate: new Date(Date.now() - days * 86_400_000).toISOString(),
     endDate:   new Date().toISOString(),
+  };
+}
+
+/**
+ * Fenêtre locale sur jours civils complets:
+ * start = J-<days> à 00:00:00 local, end = aujourd'hui 23:59:59.999 local.
+ * Convertie en ISO UTC pour HealthKit.
+ */
+function localDayIsoRange(days: number): { startDate: string; endDate: string } {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(start.getDate() - days);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+
+  return {
+    startDate: start.toISOString(),
+    endDate: end.toISOString(),
   };
 }
 
@@ -262,6 +302,10 @@ export async function requestHealthPermissions(): Promise<HealthPermissionResult
       "basalCalories",
       "bodyFat",
       "restingHeartRate",
+      "dietaryProtein",
+      "dietaryCarbohydrates",
+      "dietaryFat",
+      "dietaryEnergyConsumed",
     ];
 
     const tryReadLists: string[][] = [
@@ -299,7 +343,7 @@ export async function requestHealthPermissions(): Promise<HealthPermissionResult
       console.groupEnd();
       return {
         ok: false,
-        reason: "Accès Apple Santé refusé. Va dans Réglages > Santé > Accès des apps > Athletes Ascent pour autoriser.",
+        reason: "Accès Apple Santé refusé. Va dans Réglages > Santé > Accès des apps > PERF pour autoriser.",
       };
     }
 
@@ -346,7 +390,7 @@ async function fetchSamples(dataType: string, days: number): Promise<HealthSampl
       })
       .filter((s) => Number.isFinite(s.value) && s.value > 0);
   } catch (err) {
-    console.error(`[health] ÉCHEC readSamples(${dataType}) :`, err);
+    logHealthFetchError(`readSamples(${dataType})`, err);
     return [];
   }
 }
@@ -375,7 +419,7 @@ async function fetchNativeSleep(days: number): Promise<SleepSample[]> {
       })
       .filter((s) => s.durationMin > 0);
   } catch (err) {
-    console.error("[health] ÉCHEC readSamples(sleep) :", err);
+    logHealthFetchError("readSamples(sleep)", err);
     return [];
   }
 }
@@ -401,64 +445,55 @@ async function fetchDailySteps(days: number): Promise<HealthSample[]> {
     console.log(`[health] fetchDailySteps: ${samples.length} jours`);
     return samples;
   } catch (err) {
-    console.error("[health] ÉCHEC queryAggregated(steps) :", err);
+    logHealthFetchError("queryAggregated(steps)", err);
     return [];
   }
 }
 
 /**
- * Récupère les calories totales journalières via queryAggregated.
- * Essaie d'abord "totalCalories" (actives + basales combinées).
- * Fallback : "calories" (actives) + "basalCalories" agrégés séparément puis sommés par jour.
+ * Récupère les calories alimentaires consommées (dietaryEnergyConsumed)
+ * puis agrège par jour local.
  */
 async function fetchDailyCalories(days: number): Promise<HealthSample[]> {
-  const { startDate, endDate } = isoRange(days);
+  const { startDate, endDate } = localDayIsoRange(days);
+  try {
+    const result = await Health.readSamples({
+      startDate,
+      endDate,
+      dataType: "dietaryEnergyConsumed" as any,
+      ascending: true,
+      limit: 10000,
+    });
 
-  const aggDay = async (dataType: string): Promise<HealthSample[]> => {
-    try {
-      const result = await (Health as any).queryAggregated({
-        dataType,
-        startDate,
-        endDate,
-        bucket: "day",
-        aggregation: "sum",
-      });
-      return (result.samples ?? [])
-        .map((s: any) => ({
-          date:  toLocalDateStr(s.startDate),
-          value: Math.round(Number(s.value)),
-          unit:  "kcal",
-        }))
-        .filter((s: HealthSample) => Number.isFinite(s.value) && s.value > 0);
-    } catch (err) {
-      console.error(`[health] ÉCHEC queryAggregated(${dataType}) :`, err);
-      return [];
-    }
-  };
+    const samples: HealthSample[] = (result.samples ?? [])
+      .map((s: any) => ({
+        date: toLocalDateStr(s.startDate),
+        value: typeof s.value === "number" ? s.value : Number(s.value),
+        unit: "kcal",
+      }))
+      .filter((s: HealthSample) => Number.isFinite(s.value) && s.value > 0);
 
-  let samples = await aggDay("totalCalories");
-
-  if (samples.length === 0) {
-    const [active, basal] = await Promise.all([aggDay("calories"), aggDay("basalCalories")]);
-    console.log(`[health] fetchDailyCalories fallback: actives=${active.length}, basal=${basal.length}`);
-    // Additionner actives + basal par jour
-    samples = groupByDaySum([...active, ...basal]).map((s) => ({ ...s, unit: "kcal" }));
-  }
-
-  if (samples.length === 0) {
-    console.log("[health] fetchDailyCalories: aucune donnée disponible");
+    const byDay = groupByDaySum(samples).map((s) => ({ ...s, unit: "kcal" }));
+    const today = toLocalDateStr(new Date().toISOString());
+    const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
+    const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
+    console.log("[health] fetchDailyCalories(dietaryEnergyConsumed):", {
+      rawSamples: samples.length,
+      aggregatedDays: byDay.length,
+      rawUnits,
+      today,
+      todayTotalKcal: Math.round(todayTotal * 10) / 10,
+    });
+    return byDay;
+  } catch (err) {
+    logHealthFetchError("readSamples(dietaryEnergyConsumed)", err);
     return [];
   }
-  console.log(`[health] fetchDailyCalories: ${samples.length} jours`);
-  return samples;
 }
 
 async function fetchDietaryProtein(days: number): Promise<HealthSample[]> {
   try {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${String(startDate.getDate()).padStart(2, "0")}T00:00:00.000Z`;
-    const endStr = new Date().toISOString();
+    const { startDate: startStr, endDate: endStr } = localDayIsoRange(days);
 
     const result = await Health.readSamples({
       startDate: startStr,
@@ -475,20 +510,18 @@ async function fetchDietaryProtein(days: number): Promise<HealthSample[]> {
       }))
       .filter((s: HealthSample) => s.value > 0);
 
-    console.log("[health] fetchDietaryProtein via Health plugin:", samples.length, "samples");
-    return samples;
+    const byDay = groupByDaySum(samples).map((s) => ({ ...s, unit: "g" }));
+    console.log("[health] fetchDietaryProtein:", { rawSamples: samples.length, aggregatedDays: byDay.length });
+    return byDay;
   } catch (err) {
-    console.warn("[health] fetchDietaryProtein fallback échec:", err);
+    logHealthFetchError("readSamples(dietaryProtein)", err);
     return [];
   }
 }
 
 async function fetchDietaryCarbohydrates(days: number): Promise<HealthSample[]> {
   try {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${String(startDate.getDate()).padStart(2, "0")}T00:00:00.000Z`;
-    const endStr = new Date().toISOString();
+    const { startDate: startStr, endDate: endStr } = localDayIsoRange(days);
 
     const result = await Health.readSamples({
       startDate: startStr,
@@ -505,20 +538,18 @@ async function fetchDietaryCarbohydrates(days: number): Promise<HealthSample[]> 
       }))
       .filter((s: HealthSample) => s.value > 0);
 
-    console.log("[health] fetchDietaryCarbohydrates:", samples.length, "samples");
-    return samples;
+    const byDay = groupByDaySum(samples).map((s) => ({ ...s, unit: "g" }));
+    console.log("[health] fetchDietaryCarbohydrates:", { rawSamples: samples.length, aggregatedDays: byDay.length });
+    return byDay;
   } catch (err) {
-    console.warn("[health] fetchDietaryCarbohydrates error:", err);
+    logHealthFetchError("readSamples(dietaryCarbohydrates)", err);
     return [];
   }
 }
 
 async function fetchDietaryFat(days: number): Promise<HealthSample[]> {
   try {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${String(startDate.getDate()).padStart(2, "0")}T00:00:00.000Z`;
-    const endStr = new Date().toISOString();
+    const { startDate: startStr, endDate: endStr } = localDayIsoRange(days);
 
     const result = await Health.readSamples({
       startDate: startStr,
@@ -535,10 +566,11 @@ async function fetchDietaryFat(days: number): Promise<HealthSample[]> {
       }))
       .filter((s: HealthSample) => s.value > 0);
 
-    console.log("[health] fetchDietaryFat:", samples.length, "samples");
-    return samples;
+    const byDay = groupByDaySum(samples).map((s) => ({ ...s, unit: "g" }));
+    console.log("[health] fetchDietaryFat:", { rawSamples: samples.length, aggregatedDays: byDay.length });
+    return byDay;
   } catch (err) {
-    console.warn("[health] fetchDietaryFat error:", err);
+    logHealthFetchError("readSamples(dietaryFat)", err);
     return [];
   }
 }
@@ -575,7 +607,7 @@ async function fetchBodyFat(days: number): Promise<HealthSample[]> {
     console.log(`[health] fetchBodyFat: ${samples.length} échantillons bruts`);
     return groupByDayAverage(samples);
   } catch (err) {
-    console.error("[health] ÉCHEC readSamples(bodyFat) :", err);
+    logHealthFetchError("readSamples(bodyFat)", err);
     return [];
   }
 }
@@ -625,7 +657,7 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
 
     return out;
   } catch (err) {
-    console.error("[health] ÉCHEC queryWorkouts :", err);
+    logHealthFetchError("queryWorkouts", err);
     return [];
   }
 }
@@ -642,11 +674,30 @@ async function fetchNativeHealthData(days: number): Promise<HealthSnapshot> {
       fetchNativeSleep(days),
       fetchNativeWorkouts(days),
       fetchDailySteps(days),                 // queryAggregated bucket day sum
-      fetchDailyCalories(days),              // queryAggregated bucket day sum
+      fetchDailyCalories(days),              // dietaryEnergyConsumed agrégé par jour local
       fetchDietaryProtein(days),
       fetchDietaryCarbohydrates(days),
       fetchDietaryFat(days),
     ]);
+
+  const settledEntries = [
+    ["heartRateVariability", hrv],
+    ["weight", weight],
+    ["restingHeartRate", restingHR],
+    ["bodyFat", bodyFat],
+    ["sleep", sleep],
+    ["workouts", workouts],
+    ["steps", steps],
+    ["caloriesTotal", caloriesTotal],
+    ["dietaryProtein", protein],
+    ["dietaryCarbohydrates", carbs],
+    ["dietaryFat", fat],
+  ] as const;
+  for (const [name, result] of settledEntries) {
+    if (result.status === "rejected") {
+      logHealthFetchError(`fetchNativeHealthData:${name}`, result.reason);
+    }
+  }
 
   const sleepVal = sleep.status === "fulfilled" ? sleep.value : [];
 

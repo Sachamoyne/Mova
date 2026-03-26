@@ -9,12 +9,10 @@ export function useAuth() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
-        // Token expiré ou corrompu en localStorage → on purge et on repart propre
-        // C'est la cause du POST /auth/v1/token?grant_type=password → 400
-        console.warn("[auth] getSession error — purge de la session locale :", error.message);
+        // Token expiré ou corrompu en localStorage -> purge locale silencieuse.
+        console.warn("[auth] getSession error — purge de la session locale");
         supabase.auth.signOut();
       }
-      console.log("[auth] Session au démarrage :", session ? `user=${session.user.email}` : "null");
       setUser(session?.user ?? null);
       setLoading(false);
     });

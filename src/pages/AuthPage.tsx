@@ -33,18 +33,9 @@ export default function AuthPage() {
     })();
 
     try {
-      console.log("[auth] submit", {
-        mode: isLogin ? "login" : "signup",
-        email,
-        redirectTo,
-        supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
-      });
-
       if (isLogin) {
         const res = await supabase.auth.signInWithPassword({ email, password });
-        console.log("[auth] signInWithPassword result", res);
         if (res.error) {
-          console.error("[auth] signInWithPassword error", res.error);
           toast.error(res.error.message);
         } else {
           toast.success("Connecté !");
@@ -56,10 +47,7 @@ export default function AuthPage() {
           options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
         });
 
-        console.log("[auth] signUp result", res);
-
         if (res.error) {
-          console.error("[auth] signUp error", res.error);
           toast.error(res.error.message);
         } else {
           // Supabase crée l'utilisateur même si email confirmation est activée.
@@ -74,7 +62,6 @@ export default function AuthPage() {
         }
       }
     } catch (err: any) {
-      console.error("[auth] unexpected error", err);
       toast.error(err?.message || "Erreur d'authentification");
     }
     setLoading(false);
@@ -88,7 +75,7 @@ export default function AuthPage() {
           <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20">
             <Activity className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-display font-bold text-foreground">Sport Tracker</h1>
+          <h1 className="text-2xl font-display font-bold text-foreground">PERF</h1>
           <p className="text-sm text-muted-foreground">
             {isLogin ? "Connectez-vous pour accéder à vos données" : "Créez votre compte pour commencer"}
           </p>

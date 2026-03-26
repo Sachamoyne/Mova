@@ -5,6 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { syncAppleHealth } from "@/services/appleHealth";
+import { refreshDashboardAfterSync } from "@/lib/syncRefresh";
 
 export function AppHeader() {
   const { user } = useAuth();
@@ -20,7 +21,7 @@ export function AppHeader() {
     setIsSyncing(true);
     try {
       await syncAppleHealth(user.id);
-      queryClient.invalidateQueries();
+      await refreshDashboardAfterSync(queryClient);
     } catch {
       // silencieux
     } finally {

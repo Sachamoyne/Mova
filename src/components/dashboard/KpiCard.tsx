@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Area, AreaChart, Bar, BarChart,
-  CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { format } from "date-fns";
@@ -118,6 +118,8 @@ export function KpiCard({
   metricType, label, unit, color, icon,
   source = "health_metrics", bodyField, invertDelta, aggMode = "average", forceRaw = false,
 }: KpiCardProps) {
+  const STEPS_GOAL = 10_000;
+  const isSteps = metricType === "steps";
   const [periodIdx, setPeriodIdx] = useState(0);
   const period = PERIODS[periodIdx];
   const shouldForceRaw = forceRaw || metricType === "weight";
@@ -169,6 +171,14 @@ export function KpiCard({
   }, [history, source, bodyField, unit, aggMode]);
 
   const chartData = isMonthly ? monthlyData : dailyData;
+  const chartDataWithGoal = useMemo(() => {
+    if (!isSteps) return chartData;
+    return chartData.map((d) => ({
+      ...d,
+      aboveGoal: d.v >= STEPS_GOAL ? d.v : null,
+      belowGoal: d.v < STEPS_GOAL ? d.v : null,
+    }));
+  }, [chartData, isSteps]);
 
   // Bornes Y adaptatives
   const { yMin, yMax, yWidth } = useMemo(() => {
@@ -178,12 +188,12 @@ export function KpiCard({
     const maxV = Math.max(...vals);
     const pad = Math.max((maxV - minV) * 0.15, 1);
     const lo = zeroBased ? 0 : Math.floor(minV - pad);
-    const hi = Math.ceil(maxV + pad);
+    const hi = Math.ceil((isSteps ? Math.max(maxV, STEPS_GOAL) : maxV) + pad);
     // Largeur axe Y selon le nombre de chiffres
     const maxDigits = String(Math.round(hi)).length;
     const w = Math.max(28, maxDigits * 7 + 8);
     return { yMin: lo, yMax: hi, yWidth: w };
-  }, [chartData, zeroBased]);
+  }, [chartData, zeroBased, isSteps]);
 
   const deltaIsGood = delta !== null && delta !== 0
     ? (invertDelta ? delta < 0 : delta > 0)
@@ -198,6 +208,10 @@ export function KpiCard({
   };
 
   const axisStyle = { fontSize: 9, fill: "hsl(var(--muted-foreground))" };
+  const isGoalMetToday = isSteps && typeof displayValue === "number" ? displayValue >= STEPS_GOAL : false;
+  const valueColor = isSteps
+    ? (isGoalMetToday ? "hsl(152, 60%, 48%)" : "hsl(0, 84%, 60%)")
+    : color;
 
   return (
     <div className="glass-card p-3 flex flex-col gap-2" style={{ minHeight: "220px" }}>
@@ -217,7 +231,7 @@ export function KpiCard({
 
       {/* Valeur */}
       <div>
-        <span className="text-2xl font-display font-bold leading-none" style={{ color }}>
+        <span className="text-2xl font-display font-bold leading-none" style={{ color: valueColor }}>
           {displayValue}
         </span>
         <span className="text-[11px] text-muted-foreground ml-1">{displayUnit}</span>
@@ -231,7 +245,7 @@ export function KpiCard({
           </div>
         ) : isMonthly ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <BarChart data={chartData} margin={{ top: 4, right: isSteps ? 30 : 4, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="label" tick={false} axisLine={false} tickLine={false} height={0} />
               <YAxis
@@ -242,6 +256,15 @@ export function KpiCard({
                 tickCount={4}
                 width={yWidth}
               />
+              {isSteps && (
+                <ReferenceLine
+                  y={STEPS_GOAL}
+                  stroke="#F59E0B"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 4"
+                  ifOverflow="extendDomain"
+                />
+              )}
               <Tooltip
                 contentStyle={tooltipStyle}
                 formatter={(v: number) => [`${Math.round(v * 10) / 10} ${displayUnit}`, aggMode === "sum" ? "Total" : "Moyenne"]}
@@ -252,7 +275,7 @@ export function KpiCard({
           </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <AreaChart data={chartDataWithGoal} margin={{ top: 4, right: isSteps ? 30 : 4, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id={`grad-${metricType}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={color} stopOpacity={0.25} />
@@ -278,16 +301,47 @@ export function KpiCard({
                 }}
                 cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: "3 3" }}
               />
+              {isSteps && (
+                <>
+                  <Area
+                    type="monotone"
+                    dataKey="aboveGoal"
+                    baseValue={STEPS_GOAL}
+                    stroke="none"
+                    fill="rgba(34, 197, 94, 0.28)"
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="belowGoal"
+                    baseValue={STEPS_GOAL}
+                    stroke="none"
+                    fill="rgba(239, 68, 68, 0.15)"
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                </>
+              )}
               <Area
                 type="monotone"
                 dataKey="v"
                 stroke={color}
                 strokeWidth={2}
-                fill={`url(#grad-${metricType})`}
+                fill={isSteps ? "transparent" : `url(#grad-${metricType})`}
                 dot={history.length <= 30 ? { fill: color, r: history.length <= 7 ? 3 : 2, strokeWidth: 0 } : false}
                 activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
                 isAnimationActive={false}
               />
+              {isSteps && (
+                <ReferenceLine
+                  y={STEPS_GOAL}
+                  stroke="#F59E0B"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 4"
+                  ifOverflow="extendDomain"
+                />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         )}

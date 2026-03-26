@@ -4,13 +4,13 @@ import {
   CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { Plus, TrendingDown, TrendingUp } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import { useAuth } from "@/hooks/useAuth";
+import { useUpsertHealthMetric } from "@/hooks/useUpsertHealthMetric";
 import { Button } from "@/components/ui/button";
 import {
   Drawer, DrawerClose, DrawerContent,
@@ -96,34 +96,35 @@ export function ManualMetricCard({
   const [dateValue, setDateValue] = useState(todayLocal);
   const [value, setValue] = useState("");
 
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
   const period = PERIODS[periodIdx];
   const isMonthly = period.days >= 90;
 
   const { data: history = [] } = useMetricHistory(metricType, period.days);
+  const upsertMetric = useUpsertHealthMetric();
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("Not authenticated");
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("Valeur invalide");
-      const { error } = await supabase
-        .from("health_metrics")
-        .upsert(
-          { user_id: user.id, date: dateValue, metric_type: metricType, value: parsed, unit },
-          { onConflict: "user_id,metric_type,date" }
-        );
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["kpi_metric", metricType] });
-      toast.success(`${label} enregistré ✓`);
-      setValue("");
-      setOpen(false);
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
+  const handleSave = () => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      toast.error("Valeur invalide");
+      return;
+    }
+    upsertMetric.mutate(
+      {
+        date: dateValue,
+        metric_type: metricType as MetricType,
+        value: parsed,
+        unit,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`${label} enregistré ✓`);
+          setValue("");
+          setOpen(false);
+        },
+        onError: (e: any) => toast.error(e.message),
+      }
+    );
+  };
 
   // Données pour l'affichage
   const latest = history.length > 0 ? history[history.length - 1] : null;
@@ -210,8 +211,8 @@ export function ManualMetricCard({
                 </div>
               </div>
               <DrawerFooter>
-                <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-                  {mutation.isPending ? "Enregistrement..." : "Enregistrer"}
+                <Button onClick={handleSave} disabled={upsertMetric.isPending}>
+                  {upsertMetric.isPending ? "Enregistrement..." : "Enregistrer"}
                 </Button>
                 <DrawerClose asChild>
                   <Button variant="outline">Annuler</Button>

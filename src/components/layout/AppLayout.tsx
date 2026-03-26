@@ -7,6 +7,7 @@ import { AppleHealthOnboarding } from "@/components/health/AppleHealthOnboarding
 import { useAuth } from "@/hooks/useAuth";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { syncAppleHealth } from "@/services/appleHealth";
+import { refreshDashboardAfterSync } from "@/lib/syncRefresh";
 
 function useAutoSync() {
   const { user } = useAuth();
@@ -27,20 +28,9 @@ function useAutoSync() {
     console.log("[autoSync] Démarrage sync automatique...");
 
     syncAppleHealth(user.id)
-      .then((result) => {
+      .then(async (result) => {
         console.log("[autoSync] ✓ Sync terminé:", result.importedSamples);
-        // Invalider toutes les queries après sync
-        queryClient.invalidateQueries({ queryKey: ["health_metrics"] });
-        queryClient.invalidateQueries({ queryKey: ["body_metrics"] });
-        queryClient.invalidateQueries({ queryKey: ["body_metrics_latest"] });
-        queryClient.invalidateQueries({ queryKey: ["activities"] });
-        queryClient.invalidateQueries({ queryKey: ["weekly_summary"] });
-        queryClient.invalidateQueries({ queryKey: ["sync_status"] });
-        queryClient.invalidateQueries({ queryKey: ["latest_nutrition"] });
-        queryClient.invalidateQueries({ queryKey: ["today_workouts"] });
-        queryClient.invalidateQueries({ queryKey: ["calorie_balance"] });
-        queryClient.invalidateQueries({ queryKey: ["kpi_metric"] });
-        queryClient.invalidateQueries({ queryKey: ["kpi_body_metric"] });
+        await refreshDashboardAfterSync(queryClient);
       })
       .catch((err) => {
         console.warn("[autoSync] Sync échoué (silencieux):", err.message);

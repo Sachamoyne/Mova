@@ -9,13 +9,19 @@ import { SleepManualCard } from "@/components/dashboard/SleepManualCard";
 import { ManualMetricCard } from "@/components/dashboard/ManualMetricCard";
 import { CalorieBalanceCard } from "@/components/dashboard/CalorieBalanceCard";
 import { WeeklySummary } from "@/components/dashboard/WeeklySummary";
+import { CentralManualEntryFab } from "@/components/dashboard/CentralManualEntryFab";
+
+function getParisLocalDateString(): string {
+  return new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" });
+}
 
 function DateNav({ offset, setOffset }: {
   offset: number;
   setOffset: (fn: (o: number) => number) => void
 }) {
   const isToday = offset === 0;
-  const date = isToday ? new Date() : subDays(new Date(), Math.abs(offset));
+  const parisToday = new Date(`${getParisLocalDateString()}T12:00:00`);
+  const date = isToday ? parisToday : subDays(parisToday, Math.abs(offset));
   const label = isToday ? "Aujourd'hui" : format(date, "d MMMM", { locale: fr });
 
   return (
@@ -41,7 +47,8 @@ function DateNav({ offset, setOffset }: {
 export default function Dashboard() {
   const [offset, setOffset] = useState(0);
   const isToday = offset === 0;
-  const selectedDate = isToday ? new Date() : subDays(new Date(), Math.abs(offset));
+  const parisToday = new Date(`${getParisLocalDateString()}T12:00:00`);
+  const selectedDate = isToday ? parisToday : subDays(parisToday, Math.abs(offset));
   const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
   return (
@@ -122,6 +129,8 @@ export default function Dashboard() {
         <CalorieBalanceCard date={selectedDateStr} />
         <WeeklySummary date={selectedDateStr} />
       </div>
+
+      <CentralManualEntryFab date={selectedDateStr} />
     </div>
   );
 }

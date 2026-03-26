@@ -83,6 +83,30 @@ function groupByDayAverage(
 }
 
 /**
+ * Regroupe les échantillons par jour et additionne les valeurs.
+ * Utile pour la nutrition: plusieurs entrées le même jour (MyFitnessPal, etc.)
+ * doivent devenir une seule ligne par date avant upsert SQL.
+ */
+function groupByDaySum(
+  samples: HealthSample[]
+): HealthSample[] {
+  const map = new Map<string, { sum: number; unit: string }>();
+  for (const s of samples) {
+    const prev = map.get(s.date);
+    if (prev) {
+      prev.sum += s.value;
+    } else {
+      map.set(s.date, { sum: s.value, unit: s.unit });
+    }
+  }
+  return Array.from(map.entries()).map(([date, { sum, unit }]) => ({
+    date,
+    value: Math.round(sum * 10) / 10,
+    unit,
+  }));
+}
+
+/**
  * Calcule un score de sommeil journalier (0–100) à partir des échantillons de sleep.
  * Formule : min(100, totalSleepMinutes / 480 * 100)
  * Seuls les états actifs (deep, light, rem, asleep) comptent.
@@ -184,6 +208,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     "heartRateVariability", "weight", "sleep",
     "steps", "calories", "totalCalories", "basalCalories",
     "bodyFat", "restingHeartRate",
+    "dietaryProtein", "dietaryCarbohydrates", "dietaryFat", "dietaryEnergyConsumed",
   ];
 
   // 1. checkAuthorization — état réel des permissions accordées
@@ -235,7 +260,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
 
   const [diagSteps, diagCalories, diagHrv, diagSleep, diagWeight] = await Promise.all([
     diagAgg("steps"),
-    diagAgg("totalCalories"),
+    diagAgg("dietaryEnergyConsumed"),
     diagRead("heartRateVariability", 5),
     diagRead("sleep", 10),
     diagRead("weight", 5),
@@ -369,7 +394,17 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
 
   // ── Étape 4e : Calories totales → health_metrics ─────────────────────────
   if (snapshot.caloriesTotal.length > 0) {
-    const rows: TablesInsert<"health_metrics">[] = snapshot.caloriesTotal.map((s) => ({
+    const caloriesByDay = groupByDaySum(snapshot.caloriesTotal).map((s) => ({ ...s, unit: "kcal" }));
+    const today = toLocalDateStr(new Date().toISOString());
+    const todayCalories = caloriesByDay.find((s) => s.date === today)?.value ?? 0;
+    console.log("[appleHealth] dietaryEnergyConsumed agrégé avant upsert:", {
+      rawSamples: snapshot.caloriesTotal.length,
+      aggregatedDays: caloriesByDay.length,
+      today,
+      todayKcal: Math.round(todayCalories * 10) / 10,
+    });
+
+    const rows: TablesInsert<"health_metrics">[] = caloriesByDay.map((s) => ({
       user_id:     userId,
       date:        s.date,
       metric_type: "calories_total" as const,
@@ -379,14 +414,15 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     const { error } = await supabase
       .from("health_metrics")
       .upsert(rows, { onConflict: "user_id,metric_type,date" });
-    if (error) console.error("[appleHealth] calories_total insert error:", error);
+    if (error) console.error("[appleHealth] calories_total upsert error:", { error, rows: rows.length, rawSamples: snapshot.caloriesTotal.length });
     else importedCalories = rows.length;
-    console.log("[appleHealth] ✓ Calories totales :", importedCalories);
+    console.log("[appleHealth] ✓ Calories alimentaires :", importedCalories);
   }
 
   // ── Étape 4f : Protéines → health_metrics ────────────────────────────────
   if (snapshot.protein.length > 0) {
-    const rows: TablesInsert<"health_metrics">[] = snapshot.protein.map((s) => ({
+    const proteinByDay = groupByDaySum(snapshot.protein).map((s) => ({ ...s, unit: "g" }));
+    const rows: TablesInsert<"health_metrics">[] = proteinByDay.map((s) => ({
       user_id:     userId,
       date:        s.date,
       metric_type: "protein" as const,
@@ -396,7 +432,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     const { error } = await supabase
       .from("health_metrics")
       .upsert(rows, { onConflict: "user_id,metric_type,date" });
-    if (error) console.error("[appleHealth] protein upsert error:", error);
+    if (error) console.error("[appleHealth] protein upsert error:", { error, rows: rows.length, rawSamples: snapshot.protein.length });
     else importedProtein = rows.length;
     console.log("[appleHealth] ✓ Protéines :", importedProtein);
   }
@@ -405,7 +441,8 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
   // NOTE SQL requis côté Supabase:
   // ALTER TYPE metric_type ADD VALUE IF NOT EXISTS 'carbs';
   if (snapshot.carbohydrates.length > 0) {
-    const rows: TablesInsert<"health_metrics">[] = snapshot.carbohydrates.map((s) => ({
+    const carbsByDay = groupByDaySum(snapshot.carbohydrates).map((s) => ({ ...s, unit: "g" }));
+    const rows: TablesInsert<"health_metrics">[] = carbsByDay.map((s) => ({
       user_id:     userId,
       date:        s.date,
       metric_type: "carbs" as any,
@@ -415,7 +452,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     const { error } = await supabase
       .from("health_metrics")
       .upsert(rows, { onConflict: "user_id,metric_type,date" });
-    if (error) console.error("[appleHealth] carbs upsert error:", error);
+    if (error) console.error("[appleHealth] carbs upsert error:", { error, rows: rows.length, rawSamples: snapshot.carbohydrates.length });
     else importedCarbs = rows.length;
     console.log("[appleHealth] ✓ Glucides :", importedCarbs);
   }
@@ -424,7 +461,8 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
   // NOTE SQL requis côté Supabase:
   // ALTER TYPE metric_type ADD VALUE IF NOT EXISTS 'fat';
   if (snapshot.fat.length > 0) {
-    const rows: TablesInsert<"health_metrics">[] = snapshot.fat.map((s) => ({
+    const fatByDay = groupByDaySum(snapshot.fat).map((s) => ({ ...s, unit: "g" }));
+    const rows: TablesInsert<"health_metrics">[] = fatByDay.map((s) => ({
       user_id:     userId,
       date:        s.date,
       metric_type: "fat" as any,
@@ -434,7 +472,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     const { error } = await supabase
       .from("health_metrics")
       .upsert(rows, { onConflict: "user_id,metric_type,date" });
-    if (error) console.error("[appleHealth] fat upsert error:", error);
+    if (error) console.error("[appleHealth] fat upsert error:", { error, rows: rows.length, rawSamples: snapshot.fat.length });
     else importedFat = rows.length;
     console.log("[appleHealth] ✓ Lipides :", importedFat);
   }
@@ -625,7 +663,11 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     lastSync,
   });
 
-  await computeAndSaveCalorieBalance(userId, sinceDateStr);
+  try {
+    await computeAndSaveCalorieBalance(userId, sinceDateStr);
+  } catch (error) {
+    console.warn("[appleHealth] calorie balance refresh failed (non-blocking):", error);
+  }
 
   return {
     importedSamples,

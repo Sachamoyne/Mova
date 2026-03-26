@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { syncAppleHealth } from "@/services/appleHealth";
 import { Button } from "@/components/ui/button";
+import { refreshDashboardAfterSync } from "@/lib/syncRefresh";
 
 function useApplePlatform() {
   const [isIos, setIsIos] = useState(false);
@@ -32,21 +33,11 @@ export function SyncStatusCard() {
   const mutation = useMutation({
     mutationFn: async () => {
       // Guard explicite : ne jamais appeler HealthKit sans session valide
-      console.log("[auth] Current User:", user ?? "null — sync bloquée");
       if (!user) throw new Error("Non authentifié — reconnecte-toi avant de synchroniser.");
       return syncAppleHealth(user.id);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["health_metrics"] });
-      queryClient.invalidateQueries({ queryKey: ["latest_metrics"] });
-      queryClient.invalidateQueries({ queryKey: ["activities"] });
-      queryClient.invalidateQueries({ queryKey: ["weekly_summary"] });
-      queryClient.invalidateQueries({ queryKey: ["body_metrics"] });
-      queryClient.invalidateQueries({ queryKey: ["body_metrics_latest"] });
-      queryClient.invalidateQueries({ queryKey: ["sync_status"] });
-      queryClient.invalidateQueries({ queryKey: ["latest_nutrition"] });
-      queryClient.invalidateQueries({ queryKey: ["today_workouts"] });
-      queryClient.invalidateQueries({ queryKey: ["calorie_balance"] });
+    onSuccess: async () => {
+      await refreshDashboardAfterSync(queryClient);
     },
   });
 
@@ -111,4 +102,3 @@ export function SyncStatusCard() {
     </div>
   );
 }
-

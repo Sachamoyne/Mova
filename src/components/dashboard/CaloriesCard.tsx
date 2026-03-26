@@ -11,64 +11,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
+function getParisLocalDateString(): string {
+  return new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" });
+}
+
 function useLatestNutrition(date?: string) {
   return useQuery({
     queryKey: ["latest_nutrition", date],
     queryFn: async () => {
-      const today = new Date().toISOString().split("T")[0];
-      const targetDate = date ?? today;
+      const targetDate = date ?? getParisLocalDateString();
 
       const { data } = await supabase
         .from("health_metrics")
         .select("metric_type, value, date")
         .in("metric_type", ["calories_total", "protein", "carbs", "fat"])
         .eq("date", targetDate)
-        .order("date", { ascending: false });
+        .limit(4);
 
-      if (data && data.length > 0) {
-        const latest: Record<string, number> = {};
-        for (const row of data) {
-          if (!latest[row.metric_type]) latest[row.metric_type] = row.value;
-        }
-        return {
-          calories: latest["calories_total"] ?? 0,
-          protein: latest["protein"] ?? 0,
-          carbs: latest["carbs"] ?? 0,
-          carbsTarget: 521,
-          fat: latest["fat"] ?? 0,
-          fatTarget: 103,
-          caloriesTarget: 3400,
-          proteinTarget: 220,
-        };
+      const byMetric: Record<string, number> = {};
+      for (const row of data ?? []) {
+        byMetric[row.metric_type] = row.value;
       }
 
-      if (targetDate === today) {
-        const since = new Date();
-        since.setDate(since.getDate() - 7);
-        const { data: fallback } = await supabase
-          .from("health_metrics")
-          .select("metric_type, value, date")
-          .in("metric_type", ["calories_total", "protein", "carbs", "fat"])
-          .gte("date", since.toISOString().split("T")[0])
-          .order("date", { ascending: false });
-
-        const latest: Record<string, number> = {};
-        for (const row of fallback ?? []) {
-          if (!latest[row.metric_type]) latest[row.metric_type] = row.value;
-        }
-        return {
-          calories: latest["calories_total"] ?? 0,
-          protein: latest["protein"] ?? 0,
-          carbs: latest["carbs"] ?? 0,
-          carbsTarget: 521,
-          fat: latest["fat"] ?? 0,
-          fatTarget: 103,
-          caloriesTarget: 3400,
-          proteinTarget: 220,
-        };
-      }
-
-      return null;
+      return {
+        calories: byMetric["calories_total"] ?? 0,
+        protein: byMetric["protein"] ?? 0,
+        carbs: byMetric["carbs"] ?? 0,
+        carbsTarget: 521,
+        fat: byMetric["fat"] ?? 0,
+        fatTarget: 103,
+        caloriesTarget: 3400,
+        proteinTarget: 220,
+      };
     },
   });
 }
@@ -78,7 +52,7 @@ export function CaloriesCard({ date }: { date?: string }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [dateStr, setDateStr] = useState(new Date().toISOString().split("T")[0]);
+  const [dateStr, setDateStr] = useState(getParisLocalDateString());
   const [manualCalories, setManualCalories] = useState("");
   const [manualProtein, setManualProtein] = useState("");
   const [manualCarbs, setManualCarbs] = useState("");
@@ -165,13 +139,11 @@ export function CaloriesCard({ date }: { date?: string }) {
     },
   });
 
-  const calories = data?.calories ?? null;
-  const protein = data?.protein ?? null;
+  const calories = data?.calories ?? 0;
+  const protein = data?.protein ?? 0;
   const caloriesTarget = data?.caloriesTarget ?? 3400;
   const proteinTarget = data?.proteinTarget ?? 220;
-
-  const pct = calories != null ? Math.min((calories / caloriesTarget) * 100, 100) : 0;
-  const remaining = calories != null ? Math.max(caloriesTarget - calories, 0) : caloriesTarget;
+  const remaining = Math.max(caloriesTarget - calories, 0);
 
   const donutData = [
     { name: "Consommé", value: Math.min(calories ?? 0, caloriesTarget) },
@@ -283,7 +255,7 @@ export function CaloriesCard({ date }: { date?: string }) {
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-sm font-bold font-display" style={{ color: "hsl(25, 95%, 53%)" }}>
-              {isLoading ? "—" : calories > 0 ? calories.toLocaleString() : "—"}
+              {isLoading ? "—" : calories.toLocaleString()}
             </span>
             <span className="text-[9px] text-muted-foreground">kcal</span>
           </div>
