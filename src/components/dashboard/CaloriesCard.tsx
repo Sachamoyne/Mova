@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { Flame, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useActivePhase } from "@/hooks/useActivePhase";
+import { getParisLocalDateString, useLatestNutrition } from "@/hooks/useLatestNutrition";
 import { computeAndSaveCalorieBalance } from "@/services/calorieBalance";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
@@ -12,45 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-function getParisLocalDateString(): string {
-  return new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" });
-}
-
-function useLatestNutrition(date?: string) {
-  return useQuery({
-    queryKey: ["latest_nutrition", date],
-    queryFn: async () => {
-      const targetDate = date ?? getParisLocalDateString();
-
-      const { data } = await supabase
-        .from("health_metrics")
-        .select("metric_type, value, date")
-        .in("metric_type", ["calories_total", "protein", "carbs", "fat"])
-        .eq("date", targetDate)
-        .limit(4);
-
-      const byMetric: Record<string, number> = {};
-      for (const row of data ?? []) {
-        byMetric[row.metric_type] = row.value;
-      }
-
-      return {
-        calories: byMetric["calories_total"] ?? 0,
-        protein: byMetric["protein"] ?? 0,
-        carbs: byMetric["carbs"] ?? 0,
-        carbsTarget: 521,
-        fat: byMetric["fat"] ?? 0,
-        fatTarget: 103,
-        caloriesTarget: 3400,
-        proteinTarget: 220,
-      };
-    },
-  });
-}
-
 export function CaloriesCard({ date, detailPath }: { date?: string; detailPath?: string }) {
   const navigate = useNavigate();
   const { data, isLoading } = useLatestNutrition(date);
+  const { phase } = useActivePhase();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -143,8 +110,10 @@ export function CaloriesCard({ date, detailPath }: { date?: string; detailPath?:
 
   const calories = data?.calories ?? 0;
   const protein = data?.protein ?? 0;
-  const caloriesTarget = data?.caloriesTarget ?? 3400;
-  const proteinTarget = data?.proteinTarget ?? 220;
+  const caloriesTarget = phase.calories;
+  const proteinTarget = phase.protein;
+  const carbsTarget = phase.carbs;
+  const fatTarget = phase.fat;
   const remaining = Math.max(caloriesTarget - calories, 0);
 
   const donutData = [
@@ -308,14 +277,14 @@ export function CaloriesCard({ date, detailPath }: { date?: string; detailPath?:
                 <span className="text-muted-foreground font-medium">G</span>
                 <span className="text-foreground font-medium">
                   {isLoading ? "—" : (data?.carbs ?? 0)}
-                  <span className="text-muted-foreground">/{data?.carbsTarget ?? 521}g</span>
+                  <span className="text-muted-foreground">/{carbsTarget}g</span>
                 </span>
               </div>
               <div className="h-1 rounded-full bg-secondary overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all"
                   style={{
-                    width: `${Math.min(((data?.carbs ?? 0) / (data?.carbsTarget ?? 521)) * 100, 100)}%`,
+                    width: `${Math.min(((data?.carbs ?? 0) / carbsTarget) * 100, 100)}%`,
                     backgroundColor: "hsl(38, 92%, 50%)",
                   }}
                 />
@@ -328,14 +297,14 @@ export function CaloriesCard({ date, detailPath }: { date?: string; detailPath?:
                 <span className="text-muted-foreground font-medium">L</span>
                 <span className="text-foreground font-medium">
                   {isLoading ? "—" : (data?.fat ?? 0)}
-                  <span className="text-muted-foreground">/{data?.fatTarget ?? 103}g</span>
+                  <span className="text-muted-foreground">/{fatTarget}g</span>
                 </span>
               </div>
               <div className="h-1 rounded-full bg-secondary overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all"
                   style={{
-                    width: `${Math.min(((data?.fat ?? 0) / (data?.fatTarget ?? 103)) * 100, 100)}%`,
+                    width: `${Math.min(((data?.fat ?? 0) / fatTarget) * 100, 100)}%`,
                     backgroundColor: "hsl(152, 60%, 48%)",
                   }}
                 />

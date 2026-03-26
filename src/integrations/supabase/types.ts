@@ -216,6 +216,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          active_phase: string | null
           api_key: string | null
           birth_date: string | null
           created_at: string
@@ -223,11 +224,13 @@ export type Database = {
           height_cm: number | null
           id: string
           last_sync: string | null
+          phase_started_at: string | null
           updated_at: string
           user_id: string
           weight_kg: number | null
         }
         Insert: {
+          active_phase?: string | null
           api_key?: string | null
           birth_date?: string | null
           created_at?: string
@@ -235,11 +238,13 @@ export type Database = {
           height_cm?: number | null
           id?: string
           last_sync?: string | null
+          phase_started_at?: string | null
           updated_at?: string
           user_id: string
           weight_kg?: number | null
         }
         Update: {
+          active_phase?: string | null
           api_key?: string | null
           birth_date?: string | null
           created_at?: string
@@ -247,6 +252,7 @@ export type Database = {
           height_cm?: number | null
           id?: string
           last_sync?: string | null
+          phase_started_at?: string | null
           updated_at?: string
           user_id?: string
           weight_kg?: number | null

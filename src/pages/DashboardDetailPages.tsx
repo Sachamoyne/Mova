@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useActivePhase } from "@/hooks/useActivePhase";
+import { getParisLocalDateString, useLatestNutrition } from "@/hooks/useLatestNutrition";
 import {
   ResponsiveContainer,
   LineChart,
@@ -246,24 +248,25 @@ type NutritionDef = {
   unit: string;
   target: number;
   dashWhenZero: boolean;
+  supportedByPlugin: boolean;
 };
 
 const NUTRITION_DEFS: NutritionDef[] = [
-  { key: "calories", label: "Calories", dataTypes: ["dietaryEnergyConsumed"], unit: "kcal", target: 3400, dashWhenZero: false },
-  { key: "protein", label: "Protéines", dataTypes: ["dietaryProtein"], unit: "g", target: 220, dashWhenZero: false },
-  { key: "carbs", label: "Glucides", dataTypes: ["dietaryCarbohydrates"], unit: "g", target: 521, dashWhenZero: false },
-  { key: "fat", label: "Lipides", dataTypes: ["dietaryFatTotal", "dietaryFat"], unit: "g", target: 103, dashWhenZero: false },
-  { key: "fiber", label: "Fibres", dataTypes: ["dietaryFiber"], unit: "g", target: 45, dashWhenZero: true },
-  { key: "potassium", label: "Potassium", dataTypes: ["dietaryPotassium"], unit: "mg", target: 3500, dashWhenZero: true },
-  { key: "calcium", label: "Calcium", dataTypes: ["dietaryCalcium"], unit: "mg", target: 1000, dashWhenZero: true },
-  { key: "iron", label: "Fer", dataTypes: ["dietaryIron"], unit: "mg", target: 9, dashWhenZero: true },
-  { key: "magnesium", label: "Magnésium", dataTypes: ["dietaryMagnesium"], unit: "mg", target: 400, dashWhenZero: true },
-  { key: "zinc", label: "Zinc", dataTypes: ["dietaryZinc"], unit: "mg", target: 11, dashWhenZero: true },
-  { key: "vitaminD", label: "Vitamine D", dataTypes: ["dietaryVitaminD"], unit: "UI", target: 1750, dashWhenZero: true },
-  { key: "vitaminC", label: "Vitamine C", dataTypes: ["dietaryVitaminC"], unit: "mg", target: 82, dashWhenZero: true },
-  { key: "omega3", label: "Oméga-3", dataTypes: ["dietaryFatOmega3"], unit: "g", target: 2.5, dashWhenZero: true },
-  { key: "sodium", label: "Sodium", dataTypes: ["dietarySodium"], unit: "mg", target: 1900, dashWhenZero: true },
-  { key: "water", label: "Eau", dataTypes: ["dietaryWater"], unit: "L", target: 3, dashWhenZero: true },
+  { key: "calories", label: "Calories", dataTypes: ["dietaryEnergyConsumed"], unit: "kcal", target: 3400, dashWhenZero: false, supportedByPlugin: true },
+  { key: "protein", label: "Protéines", dataTypes: ["dietaryProtein"], unit: "g", target: 220, dashWhenZero: false, supportedByPlugin: true },
+  { key: "carbs", label: "Glucides", dataTypes: ["dietaryCarbohydrates"], unit: "g", target: 521, dashWhenZero: false, supportedByPlugin: true },
+  { key: "fat", label: "Lipides", dataTypes: ["dietaryFat"], unit: "g", target: 103, dashWhenZero: false, supportedByPlugin: true },
+  { key: "fiber", label: "Fibres", dataTypes: [], unit: "g", target: 45, dashWhenZero: true, supportedByPlugin: false },
+  { key: "potassium", label: "Potassium", dataTypes: [], unit: "mg", target: 3500, dashWhenZero: true, supportedByPlugin: false },
+  { key: "calcium", label: "Calcium", dataTypes: [], unit: "mg", target: 1000, dashWhenZero: true, supportedByPlugin: false },
+  { key: "iron", label: "Fer", dataTypes: [], unit: "mg", target: 9, dashWhenZero: true, supportedByPlugin: false },
+  { key: "magnesium", label: "Magnésium", dataTypes: [], unit: "mg", target: 400, dashWhenZero: true, supportedByPlugin: false },
+  { key: "zinc", label: "Zinc", dataTypes: [], unit: "mg", target: 11, dashWhenZero: true, supportedByPlugin: false },
+  { key: "vitaminD", label: "Vitamine D", dataTypes: [], unit: "UI", target: 1750, dashWhenZero: true, supportedByPlugin: false },
+  { key: "vitaminC", label: "Vitamine C", dataTypes: [], unit: "mg", target: 82, dashWhenZero: true, supportedByPlugin: false },
+  { key: "omega3", label: "Oméga-3", dataTypes: [], unit: "g", target: 2.5, dashWhenZero: true, supportedByPlugin: false },
+  { key: "sodium", label: "Sodium", dataTypes: [], unit: "mg", target: 1900, dashWhenZero: true, supportedByPlugin: false },
+  { key: "water", label: "Eau", dataTypes: [], unit: "L", target: 3, dashWhenZero: true, supportedByPlugin: false },
 ];
 
 const CHART_NUTRIENT_KEYS: NutritionKey[] = ["calories", "protein", "carbs", "fat"];
@@ -273,19 +276,6 @@ const EMPTY_NUTRITION_SERIES: NutritionSeriesMap = NUTRITION_DEFS.reduce((acc, n
   return acc;
 }, {} as NutritionSeriesMap);
 
-function getParisDate(isoString: string): string {
-  return new Date(isoString).toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" });
-}
-
-function getNutritionValueForDate(series: NutritionPoint[], day: string): number {
-  return series.find((point) => point.date === day)?.value ?? 0;
-}
-
-function formatNutritionValue(value: number, unit: string): string {
-  const rounded = unit === "kcal" || unit === "mg" ? Math.round(value) : Math.round(value * 10) / 10;
-  return `${rounded}${unit}`;
-}
-
 function useNutritionSeries(days: number) {
   const { user } = useAuth();
   return useQuery({
@@ -293,64 +283,68 @@ function useNutritionSeries(days: number) {
     enabled: !!user,
     queryFn: async (): Promise<NutritionSeriesMap> => {
       if (!user) return EMPTY_NUTRITION_SERIES;
-      const platform = (window as any)?.Capacitor?.getPlatform?.() ?? "web";
-      if (platform !== "ios" && platform !== "android") {
-        return EMPTY_NUTRITION_SERIES;
-      }
+      const startDay = periodStart(days);
+      const endDay = getParisLocalDateString();
+      console.log("[calories-detail] fetch nutrition series start", {
+        source: "supabase.health_metrics",
+        days,
+        startDate: startDay,
+        endDate: endDay,
+      });
 
-      const { Health } = await import("@capgo/capacitor-health");
-      const startDate = new Date(Date.now() - days * 86_400_000).toISOString();
-      const endDate = new Date().toISOString();
       const result: NutritionSeriesMap = NUTRITION_DEFS.reduce((acc, n) => {
         acc[n.key] = [];
         return acc;
       }, {} as NutritionSeriesMap);
 
-      await Promise.all(
-        NUTRITION_DEFS.map(async (nutrient) => {
-          const byDay = new Map<string, number>();
-          let hasAnySample = false;
+      const metricToKey: Record<string, NutritionKey> = {
+        calories_total: "calories",
+        protein: "protein",
+        carbs: "carbs",
+        fat: "fat",
+      };
 
-          for (const dataType of nutrient.dataTypes) {
-            try {
-              const response = await Health.readSamples({
-                dataType: dataType as any,
-                startDate,
-                endDate,
-                ascending: true,
-                limit: 10000,
-              });
+      const { data, error } = await supabase
+        .from("health_metrics")
+        .select("date, metric_type, value")
+        .eq("user_id", user.id)
+        .in("metric_type", ["calories_total", "protein", "carbs", "fat"])
+        .gte("date", startDay)
+        .lte("date", endDay)
+        .order("date", { ascending: true });
 
-              const samples = (response.samples ?? []) as Array<{ startDate: string; value: number | string; unit?: string }>;
-              if (samples.length > 0) hasAnySample = true;
+      if (error) {
+        console.warn("[calories-detail] fetch nutrition series failed", error);
+        throw error;
+      }
 
-              for (const sample of samples) {
-                const raw = typeof sample.value === "number" ? sample.value : Number(sample.value);
-                if (!Number.isFinite(raw)) continue;
-                const date = getParisDate(sample.startDate);
-                let value = raw;
-                if (nutrient.key === "water") {
-                  const unit = String(sample.unit ?? "").toLowerCase();
-                  const valueLooksLikeMilliliters = unit.includes("ml") || (!unit.includes("l") && raw > 20);
-                  value = valueLooksLikeMilliliters ? raw / 1000 : raw;
-                }
-                byDay.set(date, (byDay.get(date) ?? 0) + value);
-              }
+      const byMetricAndDay = new Map<string, number>();
+      for (const row of data ?? []) {
+        const key = metricToKey[row.metric_type];
+        if (!key) continue;
+        byMetricAndDay.set(`${key}:${row.date}`, row.value);
+      }
 
-              if (hasAnySample) break;
-            } catch {
-              // Type non autorisé ou non supporté: fallback vers le prochain alias ou série vide.
-            }
-          }
+      for (const key of CHART_NUTRIENT_KEYS) {
+        const points: NutritionPoint[] = [];
+        for (const [compound, value] of byMetricAndDay.entries()) {
+          if (!compound.startsWith(`${key}:`)) continue;
+          const date = compound.slice(key.length + 1);
+          points.push({ date, value: Math.round(value * 10) / 10 });
+        }
+        result[key] = points.sort((a, b) => a.date.localeCompare(b.date));
+      }
 
-          result[nutrient.key] = Array.from(byDay.entries())
-            .map(([date, value]) => ({
-              date,
-              value: Math.round(value * 10) / 10,
-            }))
-            .sort((a, b) => a.date.localeCompare(b.date));
-        })
-      );
+      console.log("[calories-detail] fetch nutrition series done", {
+        source: "supabase.health_metrics",
+        rows: (data ?? []).length,
+        series: {
+          calories: result.calories.length,
+          protein: result.protein.length,
+          carbs: result.carbs.length,
+          fat: result.fat.length,
+        },
+      });
 
       return result;
     },
@@ -360,34 +354,29 @@ function useNutritionSeries(days: number) {
 export function CaloriesDetailPage() {
   const [period, setPeriod] = useState<Period>(30);
   const [chartKey, setChartKey] = useState<NutritionKey>("calories");
+  const { phase } = useActivePhase();
   const { data: nutritionSeries = EMPTY_NUTRITION_SERIES } = useNutritionSeries(period);
-  const todayParis = new Date().toLocaleDateString("fr-CA", { timeZone: "Europe/Paris" });
+  const todayParis = getParisLocalDateString();
+  const { data: latestNutrition } = useLatestNutrition(todayParis);
+
+  useEffect(() => {
+    console.log("[calories-detail] mounted", { date: todayParis, period });
+  }, [todayParis, period]);
+
   const chartSeries = nutritionSeries[chartKey] ?? [];
   const chartData = lineChartData(chartSeries);
   const chartDef = NUTRITION_DEFS.find((n) => n.key === chartKey) ?? NUTRITION_DEFS[0];
-  const caloriesToday = getNutritionValueForDate(nutritionSeries.calories ?? [], todayParis);
-  const remaining = Math.max(3400 - caloriesToday, 0);
+  const chartTarget =
+    chartKey === "calories" ? phase.calories :
+    chartKey === "protein" ? phase.protein :
+    chartKey === "carbs" ? phase.carbs :
+    chartKey === "fat" ? phase.fat :
+    chartDef.target;
+  const caloriesToday = latestNutrition?.calories ?? 0;
+  const remaining = Math.max(phase.calories - caloriesToday, 0);
   const hasAnyData = useMemo(
     () => NUTRITION_DEFS.some((n) => (nutritionSeries[n.key] ?? []).length > 0),
     [nutritionSeries]
-  );
-
-  const progressRows = useMemo(
-    () =>
-      NUTRITION_DEFS.map((n) => {
-        const value = getNutritionValueForDate(nutritionSeries[n.key] ?? [], todayParis);
-        const hasValue = n.dashWhenZero ? value > 0 : value >= 0;
-        const percent = hasValue ? Math.min(100, Math.max(0, (value / n.target) * 100)) : 0;
-        const color = !hasValue
-          ? "bg-muted"
-          : percent >= 100
-            ? "bg-emerald-500"
-            : percent >= 50
-              ? "bg-orange-500"
-              : "bg-red-500";
-        return { ...n, value, hasValue, percent, color };
-      }),
-    [nutritionSeries, todayParis]
   );
 
   return (
@@ -421,7 +410,7 @@ export function CaloriesDetailPage() {
               <XAxis dataKey="label" />
               <YAxis />
               <Tooltip />
-              <ReferenceLine y={chartDef.target} stroke="hsl(25,95%,53%)" strokeDasharray="5 5" />
+              <ReferenceLine y={chartTarget} stroke="hsl(25,95%,53%)" strokeDasharray="5 5" />
               <Line type="monotone" dataKey="value" stroke="hsl(25,95%,53%)" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -429,45 +418,17 @@ export function CaloriesDetailPage() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Calories du jour</p><p className="text-2xl font-display">{Math.round(caloriesToday)}</p></div>
-        <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Objectif</p><p className="text-2xl font-display">3400</p></div>
+        <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Objectif</p><p className="text-2xl font-display">{phase.calories}</p></div>
         <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Restantes</p><p className="text-2xl font-display">{Math.round(remaining)}</p></div>
       </div>
-      <div className="glass-card p-4 space-y-3">
-        <h3 className="font-display font-semibold text-foreground">Progression du jour</h3>
-        {progressRows.map((row) => (
-          <div key={row.key} className="space-y-1">
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-foreground">{row.label}</span>
-              <span className="text-muted-foreground">
-                {row.hasValue ? `${formatNutritionValue(row.value, row.unit)} / ${formatNutritionValue(row.target, row.unit)}` : "—"}
-              </span>
-            </div>
-            <div className="h-2 rounded-full bg-secondary overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${row.color}`} style={{ width: `${row.percent}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
       {!hasAnyData && <EmptyData />}
-      <InfoCard text="Les calories pilotent ton bilan énergétique quotidien et conditionnent ta capacité à progresser en entraînement et en prise de muscle." />
       <StaticTable
         headers={["Nutriment", "Objectif/jour", "Rôle", "Aliments riches"]}
         rows={[
-          ["Calories", "3400 kcal", "Énergie pour s'entraîner et construire du muscle", "Tous les aliments"],
-          ["Protéines", "220g", "Synthèse musculaire (MPS)", "Poulet, œufs, thon, skyr, whey"],
-          ["Glucides", "521g", "Carburant musculaire, recharge glycogène", "Riz, flocons d'avoine, pâtes, banane"],
-          ["Lipides", "103g", "Production de testostérone et hormones anabolisantes", "Noix de cajou, huile d'olive, saumon, avocat"],
-          ["Fibres", "40-50g", "Santé intestinale, absorption des nutriments", "Flocons d'avoine, légumineuses, brocoli, kiwi"],
-          ["Potassium", "3500mg", "Contraction musculaire, prévention crampes", "Banane, patate douce, avocat, épinards"],
-          ["Calcium", "1000mg", "Contraction musculaire, densité osseuse", "Skyr, yaourt, sardines, brocoli"],
-          ["Fer", "8-10mg", "Transport oxygène vers les muscles", "Viande rouge, lentilles, épinards"],
-          ["Magnésium", "400mg", "Synthèse protéique, récupération, sommeil", "Noix de cajou, chocolat noir, épinards"],
-          ["Zinc", "11mg", "Production de testostérone", "Viande rouge, huîtres, graines de courge"],
-          ["Vitamine D", "1500-2000 UI", "Testostérone, récupération musculaire, force", "Saumon, sardines, œufs"],
-          ["Vitamine C", "75-90mg", "Antioxydant, absorption du fer", "Kiwi, poivron, orange, brocoli"],
-          ["Oméga-3", "2-3g EPA+DHA", "Réduit inflammation, améliore récupération", "Saumon, maquereau, sardines"],
-          ["Sodium", "1500-2300mg", "Hydratation intramusculaire, performance", "Sel, fromage, charcuterie légère"],
-          ["Eau", "3-4L", "Synthèse protéique, transport nutriments", "Eau, thé, café, fruits et légumes"],
+          ["Calories", `${phase.calories} kcal`, "Énergie pour s'entraîner et construire du muscle", "Tous les aliments"],
+          ["Protéines", `${phase.protein}g`, "Synthèse musculaire (MPS)", "Poulet, œufs, thon, skyr, whey"],
+          ["Glucides", `${phase.carbs}g`, "Carburant musculaire, recharge glycogène", "Riz, flocons d'avoine, pâtes, banane"],
+          ["Lipides", `${phase.fat}g`, "Production de testostérone et hormones anabolisantes", "Noix de cajou, huile d'olive, saumon, avocat"],
         ]}
       />
     </DetailShell>
@@ -476,6 +437,7 @@ export function CaloriesDetailPage() {
 
 export function WeightDetailPage() {
   const [period, setPeriod] = useState<Period>(30);
+  const { phase } = useActivePhase();
   const { data: series = [] } = useBodySeries("weight_kg", period);
   if (series.length === 0) return <DetailShell title="Poids" period={period} onPeriodChange={setPeriod}><EmptyData /></DetailShell>;
   const data = lineChartData(series);
@@ -483,6 +445,15 @@ export function WeightDetailPage() {
   const start = series[0]?.value ?? current;
   const delta = current - start;
   const trend = Math.abs(delta) < 0.2 ? "stable" : delta > 0 ? "hausse" : "baisse";
+  const phaseIsStable = phase.weightMonthlyMinKg === 0 && phase.weightMonthlyMaxKg === 0;
+  const phaseTargetMonthly = Math.max(
+    0.2,
+    Math.max(Math.abs(phase.weightMonthlyMinKg), Math.abs(phase.weightMonthlyMaxKg))
+  );
+  const phaseObjectiveLabel = phaseIsStable ? "Rythme cible mensuel (stable)" : "Rythme cible mensuel";
+  const phaseRangeText = phaseIsStable
+    ? "stable"
+    : `${phase.weightMonthlyMinKg > 0 ? "+" : ""}${phase.weightMonthlyMinKg} à ${phase.weightMonthlyMaxKg > 0 ? "+" : ""}${phase.weightMonthlyMaxKg} kg/mois`;
   return (
     <DetailShell title="Poids" period={period} onPeriodChange={setPeriod}>
       <div className="glass-card p-4 h-[300px]">
@@ -501,10 +472,10 @@ export function WeightDetailPage() {
         <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Variation période</p><p className="text-2xl font-display">{delta >= 0 ? "+" : ""}{delta.toFixed(1)} kg</p></div>
         <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Tendance</p><p className="text-2xl font-display capitalize">{trend}</p></div>
       </div>
-      <ObjectiveCard label="Rythme cible mensuel (lean bulk)" current={Math.abs(delta)} target={1} unit="kg" />
+      <ObjectiveCard label={phaseObjectiveLabel} current={Math.abs(delta)} target={phaseTargetMonthly} unit="kg" />
       <InfoCard text="Dans le cadre d'un lean bulk, une prise de 0,5 à 1 kg/mois est idéale — assez pour construire du muscle sans accumuler trop de gras. Une prise trop rapide (>1,5 kg/mois) signifie souvent trop de gras. Trop lente (<0,2 kg/mois) peut indiquer un déficit calorique." />
       <StaticTable headers={["Indicateur", "Valeur cible", "Interprétation"]} rows={[
-        ["Rythme de prise", "+0,5 à +1 kg/mois", "Lean bulk optimal"],
+        ["Rythme de prise", phaseRangeText, "Objectif de la phase active"],
         ["Poids à jeun", "Mesurer le matin, après toilettes", "Réduire la variabilité"],
         ["Variation normale jour/jour", "±0,5 à ±1,5 kg", "Eau, digestion — pas de vraie prise de gras"],
         ["Signal d'alerte", ">1,5 kg/mois", "Ajuster les calories à la baisse"],
@@ -554,11 +525,12 @@ export function BodyFatDetailPage() {
 
 export function ProteinDetailPage() {
   const [period, setPeriod] = useState<Period>(30);
+  const { phase } = useActivePhase();
   const { data: series = [] } = useHealthMetricSeries("protein", period);
   if (series.length === 0) return <DetailShell title="Protéines" period={period} onPeriodChange={setPeriod}><EmptyData /></DetailShell>;
   const data = lineChartData(series);
   const today = series.at(-1)?.value ?? 0;
-  const target = 220;
+  const target = phase.protein;
   return (
     <DetailShell title="Protéines" period={period} onPeriodChange={setPeriod}>
       <div className="glass-card p-4 h-[300px]">
@@ -568,18 +540,18 @@ export function ProteinDetailPage() {
             <XAxis dataKey="label" />
             <YAxis />
             <Tooltip />
-            <ReferenceLine y={220} stroke="hsl(172,66%,50%)" strokeDasharray="5 5" />
+            <ReferenceLine y={target} stroke="hsl(172,66%,50%)" strokeDasharray="5 5" />
             <Bar dataKey="value" fill="hsl(172,66%,50%)" />
           </BarChart>
         </ResponsiveContainer>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Protéines du jour</p><p className="text-2xl font-display">{Math.round(today)} g</p></div>
-        <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Objectif</p><p className="text-2xl font-display">220 g</p></div>
+        <div className="glass-card p-4"><p className="text-xs text-muted-foreground">Objectif</p><p className="text-2xl font-display">{target} g</p></div>
         <div className="glass-card p-4"><p className="text-xs text-muted-foreground">% atteint</p><p className="text-2xl font-display">{Math.round((today / target) * 100)}%</p></div>
       </div>
-      <ObjectiveCard label="Objectif protéines journalier" current={today} target={220} unit="g" />
-      <InfoCard text="Les protéines sont les briques de construction du muscle. L'objectif de 220g/jour correspond à ~2,8g par kg de poids corporel, optimal pour maximiser la synthèse protéique musculaire (MPS). Répartir sur 4-5 prises de 40-50g est plus efficace qu'une seule grande prise." />
+      <ObjectiveCard label="Objectif protéines journalier" current={today} target={target} unit="g" />
+      <InfoCard text={`Les protéines sont les briques de construction du muscle. L'objectif de ${target}g/jour est piloté par ta phase active.`} />
       <StaticTable headers={["Aliment", "Portion", "Protéines"]} rows={[
         ["Poulet (blanc)", "200g", "~46g"],
         ["Thon en boîte", "150g", "~35g"],

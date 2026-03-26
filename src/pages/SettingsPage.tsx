@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { TRAINING_PHASES, type TrainingPhaseKey, useActivePhase } from "@/hooks/useActivePhase";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useState, useEffect, useCallback } from "react";
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const [savingReminder, setSavingReminder] = useState(false);
   const queryClient = useQueryClient();
   const isDev = import.meta.env.DEV;
+  const { activePhaseKey, phase, phaseStartedAt, setActivePhase, isSaving: isSavingPhase } = useActivePhase();
 
   const fetchApiKey = useCallback(async () => {
     if (!user) return;
@@ -89,6 +91,18 @@ export default function SettingsPage() {
     toast.success("Déconnecté");
   };
 
+  const handleSelectPhase = async (nextPhase: TrainingPhaseKey) => {
+    try {
+      await setActivePhase(nextPhase);
+      queryClient.invalidateQueries({ queryKey: ["latest_nutrition"] });
+      toast.success(`Phase active: ${TRAINING_PHASES[nextPhase].label}`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Impossible de changer la phase");
+    }
+  };
+
+  const startedLabel = new Date(phaseStartedAt).toLocaleDateString("fr-FR");
+
   return (
     <div className="space-y-8 max-w-lg">
       <h1 className="text-2xl font-display font-bold text-foreground">Paramètres</h1>
@@ -133,6 +147,40 @@ export default function SettingsPage() {
         <Button onClick={handleSaveReminder} disabled={savingReminder}>
           {savingReminder ? "Enregistrement..." : "Enregistrer le rappel"}
         </Button>
+      </div>
+
+      <div className="glass-card p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-foreground">Phase d'entraînement</h2>
+        <div className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${phase.accentClass}`}>
+          {phase.label}
+        </div>
+        <p className="text-xs text-muted-foreground">Actif depuis le {startedLabel}</p>
+
+        <div className="grid grid-cols-1 gap-2">
+          {(Object.values(TRAINING_PHASES) as Array<(typeof TRAINING_PHASES)[TrainingPhaseKey]>).map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => handleSelectPhase(p.key)}
+              disabled={isSavingPhase}
+              className={`rounded-lg border p-3 text-left transition-colors ${
+                activePhaseKey === p.key
+                  ? "border-primary bg-primary/10"
+                  : "border-border hover:border-primary/40"
+              }`}
+            >
+              <p className="text-sm font-medium text-foreground">{p.label}</p>
+              <p className="text-xs text-muted-foreground">
+                {p.calories} kcal • {p.protein}g P • {p.carbs}g G • {p.fat}g L
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {p.weightMonthlyMinKg === 0 && p.weightMonthlyMaxKg === 0
+                  ? "Objectif poids: stable"
+                  : `Objectif poids: ${p.weightMonthlyMinKg > 0 ? "+" : ""}${p.weightMonthlyMinKg} à ${p.weightMonthlyMaxKg > 0 ? "+" : ""}${p.weightMonthlyMaxKg} kg/mois`}
+              </p>
+            </button>
+          ))}
+        </div>
       </div>
       {/* (Section Sync iPhone & import manuel supprimées) */}
 

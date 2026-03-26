@@ -285,14 +285,8 @@ export async function requestHealthPermissions(): Promise<HealthPermissionResult
       return { ok: false, reason };
     }
 
-    // IMPORTANT : seuls les types valides de HealthDataType sont listés ici.
-    // "workout" n'est PAS un HealthDataType — les workouts passent par queryWorkouts().
-    // Les types invalides (vo2max, bmi, leanBodyMass...) provoquent une exception native.
-    // Certains builds du plugin demandent une autorisation explicite pour les workouts.
-    // On tente d'inclure "workout(s)" dans la liste, et on fallback si le plugin rejette le type.
-    // Uniquement les HealthDataType valides du plugin @capgo/capacitor-health v8.
-    // Ne jamais ajouter un type absent de cette liste → crash bridge natif.
-    const baseRead = [
+    // IMPORTANT : uniquement les types supportés par @capgo/capacitor-health.
+    const read = [
       "heartRateVariability",
       "weight",
       "sleep",
@@ -307,32 +301,8 @@ export async function requestHealthPermissions(): Promise<HealthPermissionResult
       "dietaryFat",
       "dietaryEnergyConsumed",
     ];
-
-    const tryReadLists: string[][] = [
-      [...baseRead, "workouts"],
-      [...baseRead, "workout"],
-      baseRead,
-    ];
-
-    let status: any | null = null;
-    let lastErr: any = null;
-
-    for (const read of tryReadLists) {
-      try {
-        console.log("[health] → Health.requestAuthorization(read:", read.join(", "), ")");
-        // eslint-disable-next-line no-await-in-loop
-        status = await Health.requestAuthorization({ read: read as any, write: [] });
-        lastErr = null;
-        break;
-      } catch (e) {
-        lastErr = e;
-        console.warn("[health] requestAuthorization failed for read list, retrying:", read, e);
-      }
-    }
-
-    if (!status) {
-      throw lastErr ?? new Error("requestAuthorization failed");
-    }
+    console.log("[health] → Health.requestAuthorization(read):", read.join(", "));
+    const status = await Health.requestAuthorization({ read: read as any, write: [] });
     console.log("[health] ← requestAuthorization :", JSON.stringify(status));
 
     const granted = status.readAuthorized ?? [];
