@@ -326,9 +326,9 @@ export default function OnboardingPage() {
                 <p>En continuant, tu acceptes que tes données soient stockées sur nos serveurs.</p>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={goToNext}>J'accepte</Button>
+                <Button onClick={goToNext}>Continuer</Button>
                 <Button variant="outline" onClick={handleContinueWithoutSync}>
-                  Refuser — données locales uniquement
+                  Continuer sans synchronisation
                 </Button>
               </div>
             </div>

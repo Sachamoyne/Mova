@@ -34,9 +34,9 @@ export function SyncConsentDialog({ open, onOpenChange, onAccept, onDecline, blo
 
         <DialogFooter className="sm:justify-end gap-2">
           <Button variant="outline" onClick={onDecline}>
-            Refuser — données locales uniquement
+            Continuer sans synchronisation
           </Button>
-          <Button onClick={onAccept}>J'accepte</Button>
+          <Button onClick={onAccept}>Continuer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -39,10 +39,10 @@ export default function ConsentPage({ onAccept, onDecline, isLoading = false }: 
 
           <div className="space-y-3 pt-2">
             <Button className="w-full" onClick={onAccept} disabled={isLoading}>
-              {isLoading ? "Autorisation en cours..." : "J'accepte"}
+              {isLoading ? "Autorisation en cours..." : "Continuer"}
             </Button>
             <Button variant="outline" className="w-full border-white/30 bg-transparent text-white hover:bg-white/10" onClick={onDecline} disabled={isLoading}>
-              Refuser — données locales uniquement
+              Continuer sans synchronisation
             </Button>
           </div>
         </div>
