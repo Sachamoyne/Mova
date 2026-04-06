@@ -3,6 +3,7 @@ import { useActivities } from "@/hooks/useActivities";
 import { useRunningRecords, useUpsertRunningRecord } from "@/hooks/useRunningRecords";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -71,6 +72,7 @@ type ChartEntry = {
 };
 
 export default function Running() {
+  const { user } = useAuth();
   const { data: allRuns = [] } = useActivities("running");
   const { data: records = [] } = useRunningRecords();
   const upsertRecord = useUpsertRunningRecord();
@@ -93,11 +95,14 @@ export default function Running() {
 
   // VO2Max latest
   const { data: vo2Data } = useQuery({
-    queryKey: ["vo2max_latest"],
+    queryKey: ["vo2max_latest", user?.id],
+    enabled: !!user,
     queryFn: async () => {
+      if (!user) return [];
       const { data } = await supabase
         .from("health_metrics")
         .select("value, date")
+        .eq("user_id", user.id)
         .eq("metric_type", "vo2max")
         .order("date", { ascending: false })
         .limit(2);

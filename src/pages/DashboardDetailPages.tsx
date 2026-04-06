@@ -144,6 +144,7 @@ function useHealthMetricSeries(metricType: "calories_total" | "protein" | "steps
       const { data, error } = await supabase
         .from("health_metrics")
         .select("date, value")
+        .eq("user_id", user.id)
         .eq("metric_type", metricType)
         .gte("date", periodStart(days))
         .order("date", { ascending: true });
@@ -163,6 +164,7 @@ function useBodySeries(field: "weight_kg" | "body_fat_pc", days: number) {
       const { data, error } = await supabase
         .from("body_metrics")
         .select(`date, ${field}`)
+        .eq("user_id", user.id)
         .gte("date", periodStart(days))
         .order("date", { ascending: true });
       if (error) throw error;

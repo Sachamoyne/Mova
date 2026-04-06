@@ -1,6 +1,6 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -129,6 +129,16 @@ function AppRoutes() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthorizingHealth, setIsAuthorizingHealth] = useState(false);
+  const queryClient = useQueryClient();
+  const previousUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    if (previousUserIdRef.current !== null && previousUserIdRef.current !== currentUserId) {
+      queryClient.clear();
+    }
+    previousUserIdRef.current = currentUserId;
+  }, [queryClient, user?.id]);
 
   const handleConsentAccept = async () => {
     setSyncConsent(true);

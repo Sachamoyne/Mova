@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import type { Database } from "@/integrations/supabase/types";
 import { usePersistedChartPeriod } from "@/hooks/usePersistedChartPeriod";
 import { parseLocalDate } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 type MetricType = Database["public"]["Enums"]["metric_type"];
 
@@ -84,15 +85,22 @@ interface KpiCardProps {
   detailPath?: string;
 }
 
-function useMetricHistory(metricType: string, days: number | null, enabled: boolean) {
+function useMetricHistory(
+  userId: string | undefined,
+  metricType: string,
+  days: number | null,
+  enabled: boolean
+) {
   return useQuery({
-    queryKey: ["kpi_metric", metricType, days ?? "all"],
-    enabled,
+    queryKey: ["kpi_metric", userId, metricType, days ?? "all"],
+    enabled: enabled && !!userId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
+      if (!userId) return [];
       let query = supabase
         .from("health_metrics")
         .select("value, date, unit")
+        .eq("user_id", userId)
         .eq("metric_type", metricType as MetricType)
         .order("date", { ascending: true });
       if (days != null) {
@@ -108,14 +116,17 @@ function useMetricHistory(metricType: string, days: number | null, enabled: bool
   });
 }
 
-function useBodyMetricHistory(field: string, days: number | null) {
+function useBodyMetricHistory(userId: string | undefined, field: string, days: number | null) {
   return useQuery({
-    queryKey: ["kpi_body_metric", field, days ?? "all"],
+    queryKey: ["kpi_body_metric", userId, field, days ?? "all"],
+    enabled: !!userId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
+      if (!userId) return [] as { value: number; date: string }[];
       let query = supabase
         .from("body_metrics")
         .select("date, weight_kg, body_fat_pc, muscle_mass_kg")
+        .eq("user_id", userId)
         .order("date", { ascending: true });
       if (days != null) {
         const since = new Date();
@@ -136,6 +147,7 @@ export function KpiCard({
   metricType, label, unit, color, icon,
   source = "health_metrics", bodyField, invertDelta, aggMode = "average", forceRaw = false, detailPath,
 }: KpiCardProps) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const STEPS_GOAL = 10_000;
   const isSteps = metricType === "steps";
@@ -153,8 +165,8 @@ export function KpiCard({
   const zeroBased = ZERO_BASED.includes(metricType);
 
   const enableHealth = source === "health_metrics" && isHealthMetricType(metricType);
-  const { data: healthHistory = [] } = useMetricHistory(metricType, period.days, enableHealth);
-  const { data: bodyHistory = [] } = useBodyMetricHistory(bodyField || "weight_kg", period.days);
+  const { data: healthHistory = [] } = useMetricHistory(user?.id, metricType, period.days, enableHealth);
+  const { data: bodyHistory = [] } = useBodyMetricHistory(user?.id, bodyField || "weight_kg", period.days);
   const history = source === "body_metrics" ? bodyHistory : healthHistory;
 
   const { displayValue, unit: displayUnit, delta, deltaLabel, dailyData, monthlyData } = useMemo(() => {
