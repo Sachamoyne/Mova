@@ -40,6 +40,7 @@ import { useActivities } from "@/hooks/useHealthData";
 import { useLatestBodyMetric, useBodyMetrics } from "@/hooks/useBodyMetrics";
 import {
   useWorkoutSessions,
+  useWorkoutSetsBySession,
   useAddWorkoutSet,
   useDeleteWorkoutSet,
   useGetOrCreateSessionForActivity,
@@ -401,7 +402,12 @@ function LogbookView({
   const session = effectiveSessionId
     ? workoutSessions.find((s) => s.id === effectiveSessionId) ?? null
     : null;
-  const sets = (session?.workout_sets ?? []) as WorkoutSetRow[];
+  const {
+    data: sessionSets = [],
+    isLoading: isSessionSetsLoading,
+    error: sessionSetsError,
+  } = useWorkoutSetsBySession(effectiveSessionId);
+  const sets = sessionSets as WorkoutSetRow[];
 
   useEffect(() => {
     console.log("[logbook] début fetch, workout_id:", effectiveSessionId ?? null);
@@ -432,6 +438,16 @@ function LogbookView({
     }
   }, [workoutSessionsError, isWorkoutSessionsLoading]);
 
+  useEffect(() => {
+    if (sessionSetsError) {
+      const message =
+        sessionSetsError instanceof Error
+          ? sessionSetsError.message
+          : "Impossible de charger les exercices de la séance.";
+      setErrorMessage(message);
+    }
+  }, [sessionSetsError]);
+
   const groupedExercises = useMemo(() => {
     const map = new Map<string, WorkoutSetRow[]>();
     for (const s of sets) {
@@ -457,7 +473,7 @@ function LogbookView({
     );
   }
 
-  if (isWorkoutSessionsLoading) {
+  if (isWorkoutSessionsLoading || (effectiveSessionId && isSessionSetsLoading)) {
     return (
       <div className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
         Chargement du logbook...

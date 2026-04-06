@@ -20,12 +20,40 @@ export function useWorkoutSessions() {
       console.log("[logbook] début fetch, workout_id:", null);
       const { data, error } = await supabase
         .from("workout_sessions")
-        .select("id,user_id,date,name,notes,created_at,activity_id, workout_sets(*)")
+        .select("id,user_id,date,name,notes,created_at,activity_id, workout_sets!workout_sets_session_id_fkey(*)")
         .eq("user_id", user.id)
         .order("date", { ascending: false });
       console.log("[logbook] résultat:", data, "erreur:", error);
       if (error) throw error;
       return (data ?? []) as WorkoutSessionRow[];
+    },
+  });
+}
+
+export function useWorkoutSetsBySession(sessionId: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["workout_sets", "session", user?.id, sessionId],
+    enabled: !!user && !!sessionId,
+    queryFn: async () => {
+      if (!user || !sessionId) return [] as WorkoutSetRow[];
+      console.log("[logbook] fetch sets by session_id:", sessionId);
+      const { data, error } = await supabase
+        .from("workout_sets")
+        .select("id,user_id,session_id,exercise_name,set_number,reps,weight_kg,notes,created_at")
+        .eq("user_id", user.id)
+        .eq("session_id", sessionId)
+        .order("set_number", { ascending: true })
+        .order("created_at", { ascending: true });
+      console.log("[logbook] sets résultat:", {
+        session_id: sessionId,
+        count: data?.length ?? 0,
+        first_set: data?.[0] ?? null,
+        error,
+      });
+      if (error) throw error;
+      return (data ?? []) as WorkoutSetRow[];
     },
   });
 }
