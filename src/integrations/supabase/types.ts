@@ -259,42 +259,6 @@ export type Database = {
         }
         Relationships: []
       }
-      user_profile: {
-        Row: {
-          activity_level: string | null
-          age: number | null
-          created_at: string
-          height_cm: number | null
-          id: string
-          sex: string | null
-          updated_at: string
-          user_id: string
-          weight_kg: number | null
-        }
-        Insert: {
-          activity_level?: string | null
-          age?: number | null
-          created_at?: string
-          height_cm?: number | null
-          id?: string
-          sex?: string | null
-          updated_at?: string
-          user_id: string
-          weight_kg?: number | null
-        }
-        Update: {
-          activity_level?: string | null
-          age?: number | null
-          created_at?: string
-          height_cm?: number | null
-          id?: string
-          sex?: string | null
-          updated_at?: string
-          user_id?: string
-          weight_kg?: number | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           active_phase: string | null
