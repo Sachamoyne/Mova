@@ -11,7 +11,7 @@ import { refreshDashboardAfterSync } from "@/lib/syncRefresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { isSyncUploadAllowed } from "@/lib/syncConsent";
 
-const MIN_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 min entre deux syncs foreground
+const MIN_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 min entre deux syncs foreground
 
 function useAutoSync() {
   const { user } = useAuth();
@@ -34,11 +34,11 @@ function useAutoSync() {
       });
   };
 
-  // Sync au montage si jamais synchronisé ou sync > 6h
+  // Sync au montage si jamais synchronisé ou sync > 1h
   useEffect(() => {
     if (!user) return;
     const shouldSync = !syncStatus?.lastSync ||
-      (Date.now() - syncStatus.lastSync.getTime()) > 6 * 60 * 60 * 1000;
+      (Date.now() - syncStatus.lastSync.getTime()) > 60 * 60 * 1000;
     if (shouldSync) runSync(user.id, "montage");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, syncStatus?.lastSync?.getTime()]);
