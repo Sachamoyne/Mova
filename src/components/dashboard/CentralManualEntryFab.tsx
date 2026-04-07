@@ -31,6 +31,7 @@ export function CentralManualEntryFab({ date }: { date: string }) {
   const [open, setOpen] = useState(false);
   const [hrv, setHrv] = useState("");
   const [vo2max, setVo2max] = useState("");
+  const [rhr, setRhr] = useState("");
 
   const { data: latestMetrics = {} } = useLatestMetrics();
 
@@ -40,6 +41,7 @@ export function CentralManualEntryFab({ date }: { date: string }) {
     return {
       hrv: formatNum(latestMetrics?.hrv?.value),
       vo2max: formatNum(latestMetrics?.vo2max?.value),
+      rhr: formatNum(latestMetrics?.rhr?.value),
     };
   }, [latestMetrics]);
 
@@ -81,13 +83,15 @@ export function CentralManualEntryFab({ date }: { date: string }) {
   const resetFields = () => {
     setHrv("");
     setVo2max("");
+    setRhr("");
   };
 
   const handleSaveAll = async () => {
     const hrvV = parseOptionalPositiveNumber(hrv);
     const vo2maxV = parseOptionalPositiveNumber(vo2max);
+    const rhrV = parseOptionalPositiveNumber(rhr);
 
-    if ([hrvV, vo2maxV].includes(null)) {
+    if ([hrvV, vo2maxV, rhrV].includes(null)) {
       toast.error("Certaines valeurs sont invalides");
       return;
     }
@@ -112,6 +116,17 @@ export function CentralManualEntryFab({ date }: { date: string }) {
           metric_type: "vo2max",
           value: vo2maxV,
           unit: "ml/kg/min",
+        })
+      );
+    }
+
+    if (rhrV !== undefined) {
+      tasks.push(
+        upsertHealthMetric.mutateAsync({
+          date,
+          metric_type: "rhr",
+          value: rhrV,
+          unit: "bpm",
         })
       );
     }
@@ -143,7 +158,7 @@ export function CentralManualEntryFab({ date }: { date: string }) {
             Saisir
           </Button>
         </DrawerTrigger>
-        <DrawerContent className="bg-card border-border max-h-[46vh]">
+        <DrawerContent className="bg-card border-border max-h-[56vh]">
           <DrawerHeader>
             <DrawerTitle>Saisie rapide du jour ({date || toLocalDateStr(new Date())})</DrawerTitle>
           </DrawerHeader>
@@ -155,6 +170,10 @@ export function CentralManualEntryFab({ date }: { date: string }) {
             <div className="space-y-1">
               <Label>VO2Max (ml/kg/min)</Label>
               <Input type="number" step="0.1" value={vo2max} onChange={(e) => setVo2max(e.target.value)} placeholder={placeholders.vo2max || "ex: 50"} />
+            </div>
+            <div className="space-y-1">
+              <Label>FC Repos (bpm)</Label>
+              <Input type="number" step="1" value={rhr} onChange={(e) => setRhr(e.target.value)} placeholder={placeholders.rhr || "ex: 42"} />
             </div>
           </div>
           <DrawerFooter>
