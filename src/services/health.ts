@@ -19,6 +19,21 @@ import { Health } from "@capgo/capacitor-health";
 import type { Workout } from "@capgo/capacitor-health/dist/esm/definitions";
 const DEV = import.meta.env.DEV;
 
+const HEALTH_READ_TYPES = [
+  "heartRateVariability",
+  "weight",
+  "sleep",
+  "steps",
+  "calories",
+  "basalCalories",
+  "bodyFat",
+  "restingHeartRate",
+  "dietaryProtein",
+  "dietaryCarbohydrates",
+  "dietaryFat",
+  "dietaryEnergyConsumed",
+] as const;
+
 export function toLocalDateStr(isoString: string): string {
   const d = new Date(isoString);
   const year = d.getFullYear();
@@ -292,20 +307,7 @@ export async function requestHealthPermissions(): Promise<HealthPermissionResult
     }
 
     // IMPORTANT : uniquement les types supportés par @capgo/capacitor-health.
-    const read = [
-      "heartRateVariability",
-      "weight",
-      "sleep",
-      "steps",
-      "calories",
-      "basalCalories",
-      "bodyFat",
-      "restingHeartRate",
-      "dietaryProtein",
-      "dietaryCarbohydrates",
-      "dietaryFat",
-      "dietaryEnergyConsumed",
-    ];
+    const read = [...HEALTH_READ_TYPES];
     if (DEV) console.log("[health] → Health.requestAuthorization(read):", read.join(", "));
     const status = await Health.requestAuthorization({ read: read as any, write: [] });
     if (DEV) console.log("[health] ← requestAuthorization :", JSON.stringify(status));
@@ -348,17 +350,7 @@ export async function checkHealthAuthorization(): Promise<HealthAuthorizationChe
 
   try {
     const res = await (Health as any).checkAuthorization({
-      read: [
-        "heartRateVariability",
-        "restingHeartRate",
-        "sleep",
-        "weight",
-        "bodyFat",
-        "steps",
-        "dietaryProtein",
-        "dietaryCarbohydrates",
-        "dietaryFat",
-      ],
+      read: [...HEALTH_READ_TYPES] as any,
     });
     return {
       authorized: res.readAuthorized ?? [],
@@ -507,18 +499,31 @@ async function fetchDietaryProtein(days: number): Promise<HealthSample[]> {
       endDate: endStr,
       dataType: "dietaryProtein" as any,
       ascending: true,
+      limit: 10000,
     });
 
     const samples: HealthSample[] = (result.samples ?? [])
-      .map((s: any) => ({
-        date: toLocalDateStr(s.startDate),
-        value: typeof s.value === "number" ? Math.round(s.value * 10) / 10 : 0,
-        unit: "g",
-      }))
-      .filter((s: HealthSample) => s.value > 0);
+      .map((s: any) => {
+        const rawValue = Number(s.value);
+        return {
+          date: toLocalDateStr(s.startDate),
+          value: Number.isFinite(rawValue) ? Math.round(rawValue * 10) / 10 : 0,
+          unit: "g",
+        };
+      })
+      .filter((s: HealthSample) => Number.isFinite(s.value) && s.value > 0);
 
     const byDay = groupByDaySum(samples).map((s) => ({ ...s, unit: "g" }));
-    if (DEV) console.log("[health] fetchDietaryProtein:", { rawSamples: samples.length, aggregatedDays: byDay.length });
+    const today = toLocalDateStr(new Date().toISOString());
+    const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
+    const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
+    if (DEV) console.log("[health] fetchDietaryProtein:", {
+      rawSamples: samples.length,
+      aggregatedDays: byDay.length,
+      rawUnits,
+      today,
+      todayTotalG: Math.round(todayTotal * 10) / 10,
+    });
     return byDay;
   } catch (err) {
     logHealthFetchError("readSamples(dietaryProtein)", err);
@@ -535,18 +540,31 @@ async function fetchDietaryCarbohydrates(days: number): Promise<HealthSample[]> 
       endDate: endStr,
       dataType: "dietaryCarbohydrates" as any,
       ascending: true,
+      limit: 10000,
     });
 
     const samples: HealthSample[] = (result.samples ?? [])
-      .map((s: any) => ({
-        date: toLocalDateStr(s.startDate),
-        value: typeof s.value === "number" ? Math.round(s.value * 10) / 10 : 0,
-        unit: "g",
-      }))
-      .filter((s: HealthSample) => s.value > 0);
+      .map((s: any) => {
+        const rawValue = Number(s.value);
+        return {
+          date: toLocalDateStr(s.startDate),
+          value: Number.isFinite(rawValue) ? Math.round(rawValue * 10) / 10 : 0,
+          unit: "g",
+        };
+      })
+      .filter((s: HealthSample) => Number.isFinite(s.value) && s.value > 0);
 
     const byDay = groupByDaySum(samples).map((s) => ({ ...s, unit: "g" }));
-    if (DEV) console.log("[health] fetchDietaryCarbohydrates:", { rawSamples: samples.length, aggregatedDays: byDay.length });
+    const today = toLocalDateStr(new Date().toISOString());
+    const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
+    const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
+    if (DEV) console.log("[health] fetchDietaryCarbohydrates:", {
+      rawSamples: samples.length,
+      aggregatedDays: byDay.length,
+      rawUnits,
+      today,
+      todayTotalG: Math.round(todayTotal * 10) / 10,
+    });
     return byDay;
   } catch (err) {
     logHealthFetchError("readSamples(dietaryCarbohydrates)", err);
@@ -563,18 +581,31 @@ async function fetchDietaryFat(days: number): Promise<HealthSample[]> {
       endDate: endStr,
       dataType: "dietaryFat" as any,
       ascending: true,
+      limit: 10000,
     });
 
     const samples: HealthSample[] = (result.samples ?? [])
-      .map((s: any) => ({
-        date: toLocalDateStr(s.startDate),
-        value: typeof s.value === "number" ? Math.round(s.value * 10) / 10 : 0,
-        unit: "g",
-      }))
-      .filter((s: HealthSample) => s.value > 0);
+      .map((s: any) => {
+        const rawValue = Number(s.value);
+        return {
+          date: toLocalDateStr(s.startDate),
+          value: Number.isFinite(rawValue) ? Math.round(rawValue * 10) / 10 : 0,
+          unit: "g",
+        };
+      })
+      .filter((s: HealthSample) => Number.isFinite(s.value) && s.value > 0);
 
     const byDay = groupByDaySum(samples).map((s) => ({ ...s, unit: "g" }));
-    if (DEV) console.log("[health] fetchDietaryFat:", { rawSamples: samples.length, aggregatedDays: byDay.length });
+    const today = toLocalDateStr(new Date().toISOString());
+    const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
+    const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
+    if (DEV) console.log("[health] fetchDietaryFat:", {
+      rawSamples: samples.length,
+      aggregatedDays: byDay.length,
+      rawUnits,
+      today,
+      todayTotalG: Math.round(todayTotal * 10) / 10,
+    });
     return byDay;
   } catch (err) {
     logHealthFetchError("readSamples(dietaryFat)", err);

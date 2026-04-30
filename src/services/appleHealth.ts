@@ -2,11 +2,17 @@ import { Health } from "@capgo/capacitor-health";
 import { requestHealthPermissions, fetchHealthData, toLocalDateStr } from "./health";
 import type { HealthSample, SleepSample } from "./health";
 import { supabase } from "@/integrations/supabase/client";
-import type { TablesInsert } from "@/integrations/supabase/types";
+import type { Json, TablesInsert } from "@/integrations/supabase/types";
 import { computeAndSaveCalorieBalance } from "@/services/calorieBalance";
 import { getSyncConsent, isSyncUploadAllowed } from "@/lib/syncConsent";
 import { isIphoneSourceDevice } from "@/lib/platform";
 const DEV = import.meta.env.DEV;
+
+const HEALTHKIT_NUTRIENT_METRIC_TYPES = {
+  dietaryProtein: "protein",
+  dietaryCarbohydrates: "carbs",
+  dietaryFat: "fat",
+} as const;
 
 export interface DiagnosticReport {
   permissions: {
@@ -21,6 +27,9 @@ export interface DiagnosticReport {
     hrv: number;
     sleep: number;
     weight: number;
+    protein: number;
+    carbohydrates: number;
+    fat: number;
   };
 }
 
@@ -132,6 +141,13 @@ function computeSleepScores(
   }));
 }
 
+async function insertAppleHealthSyncLog(row: TablesInsert<"sync_logs">) {
+  const { error } = await supabase.from("sync_logs").insert(row);
+  if (error) {
+    console.error("[appleHealth] sync_logs insert error:", error);
+  }
+}
+
 /**
  * Synchronise Apple Health → Supabase (30 derniers jours).
  *
@@ -186,7 +202,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
       },
       diagnosticReport: {
         permissions: { authorized: [], denied: [] },
-        samples: { steps: 0, calories: 0, hrv: 0, sleep: 0, weight: 0 },
+        samples: { steps: 0, calories: 0, hrv: 0, sleep: 0, weight: 0, protein: 0, carbohydrates: 0, fat: 0 },
       },
       lastSync: new Date().toISOString(),
     } satisfies AppleHealthSyncResult;
@@ -264,9 +280,12 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     }
   };
 
-  const [diagSteps, diagCalories, diagHrv, diagSleep, diagWeight] = await Promise.all([
+  const [diagSteps, diagCalories, diagProtein, diagCarbs, diagFat, diagHrv, diagSleep, diagWeight] = await Promise.all([
     diagAgg("steps"),
     diagAgg("dietaryEnergyConsumed"),
+    diagRead("dietaryProtein", 5),
+    diagRead("dietaryCarbohydrates", 5),
+    diagRead("dietaryFat", 5),
     diagRead("heartRateVariability", 5),
     diagRead("sleep", 10),
     diagRead("weight", 5),
@@ -280,6 +299,9 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     samples: {
       steps:    diagSteps,
       calories: diagCalories,
+      protein: diagProtein,
+      carbohydrates: diagCarbs,
+      fat: diagFat,
       hrv:      diagHrv,
       sleep:    diagSleep,
       weight:   diagWeight,
@@ -329,6 +351,7 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
   let importedProtein    = 0;
   let importedCarbs      = 0;
   let importedFat        = 0;
+  const syncErrors: string[] = [];
   let verified = {
     health_metrics: {
       hrv: 0,
@@ -445,55 +468,57 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     const rows: TablesInsert<"health_metrics">[] = proteinByDay.map((s) => ({
       user_id:     userId,
       date:        s.date,
-      metric_type: "protein" as const,
+      metric_type: HEALTHKIT_NUTRIENT_METRIC_TYPES.dietaryProtein,
       value:       s.value,
       unit:        "g",
     }));
     const { error } = await supabase
       .from("health_metrics")
       .upsert(rows, { onConflict: "user_id,metric_type,date" });
-    if (error) console.error("[appleHealth] protein upsert error:", { error, rows: rows.length, rawSamples: snapshot.protein.length });
-    else importedProtein = rows.length;
+    if (error) {
+      syncErrors.push(`protein upsert: ${error.message}`);
+      console.error("[appleHealth] protein upsert error:", { error, rows: rows.length, rawSamples: snapshot.protein.length });
+    } else importedProtein = rows.length;
     console.log("[appleHealth] ✓ Protéines :", importedProtein);
   }
 
   // ── Étape 4g : Glucides → health_metrics ─────────────────────────────────
-  // NOTE SQL requis côté Supabase:
-  // ALTER TYPE metric_type ADD VALUE IF NOT EXISTS 'carbs';
   if (uploadEnabled && snapshot.carbohydrates.length > 0) {
     const carbsByDay = groupByDaySum(snapshot.carbohydrates).map((s) => ({ ...s, unit: "g" }));
     const rows: TablesInsert<"health_metrics">[] = carbsByDay.map((s) => ({
       user_id:     userId,
       date:        s.date,
-      metric_type: "carbs" as any,
+      metric_type: HEALTHKIT_NUTRIENT_METRIC_TYPES.dietaryCarbohydrates,
       value:       s.value,
       unit:        "g",
     }));
     const { error } = await supabase
       .from("health_metrics")
       .upsert(rows, { onConflict: "user_id,metric_type,date" });
-    if (error) console.error("[appleHealth] carbs upsert error:", { error, rows: rows.length, rawSamples: snapshot.carbohydrates.length });
-    else importedCarbs = rows.length;
+    if (error) {
+      syncErrors.push(`carbs upsert: ${error.message}`);
+      console.error("[appleHealth] carbs upsert error:", { error, rows: rows.length, rawSamples: snapshot.carbohydrates.length });
+    } else importedCarbs = rows.length;
     console.log("[appleHealth] ✓ Glucides :", importedCarbs);
   }
 
   // ── Étape 4h : Lipides → health_metrics ──────────────────────────────────
-  // NOTE SQL requis côté Supabase:
-  // ALTER TYPE metric_type ADD VALUE IF NOT EXISTS 'fat';
   if (uploadEnabled && snapshot.fat.length > 0) {
     const fatByDay = groupByDaySum(snapshot.fat).map((s) => ({ ...s, unit: "g" }));
     const rows: TablesInsert<"health_metrics">[] = fatByDay.map((s) => ({
       user_id:     userId,
       date:        s.date,
-      metric_type: "fat" as any,
+      metric_type: HEALTHKIT_NUTRIENT_METRIC_TYPES.dietaryFat,
       value:       s.value,
       unit:        "g",
     }));
     const { error } = await supabase
       .from("health_metrics")
       .upsert(rows, { onConflict: "user_id,metric_type,date" });
-    if (error) console.error("[appleHealth] fat upsert error:", { error, rows: rows.length, rawSamples: snapshot.fat.length });
-    else importedFat = rows.length;
+    if (error) {
+      syncErrors.push(`fat upsert: ${error.message}`);
+      console.error("[appleHealth] fat upsert error:", { error, rows: rows.length, rawSamples: snapshot.fat.length });
+    } else importedFat = rows.length;
     console.log("[appleHealth] ✓ Lipides :", importedFat);
   }
 
@@ -698,8 +723,56 @@ export async function syncAppleHealth(userId: string): Promise<AppleHealthSyncRe
     importedHrv, importedRhr, importedSleepScore,
     importedWeight, importedBodyFat, importedWorkouts,
     importedSleep, importedSteps, importedCalories, importedProtein, importedCarbs, importedFat,
+    syncErrors,
     lastSync,
   });
+
+  if (uploadEnabled) {
+    await insertAppleHealthSyncLog({
+      user_id: userId,
+      source: "apple_health",
+      status: syncErrors.length > 0 ? "partial" : "success",
+      records_imported: importedSamples,
+      error_message: syncErrors.length > 0 ? syncErrors.join("; ") : null,
+      payload: {
+        fetched: {
+          hrv: snapshot.hrv.length,
+          restingHR: snapshot.restingHR.length,
+          sleep: snapshot.sleep.length,
+          weight: snapshot.weight.length,
+          bodyFat: snapshot.bodyFat.length,
+          workouts: snapshot.workouts.length,
+          sleepHours: snapshot.sleepHours.length,
+          steps: snapshot.steps.length,
+          caloriesTotal: snapshot.caloriesTotal.length,
+          protein: snapshot.protein.length,
+          carbohydrates: snapshot.carbohydrates.length,
+          fat: snapshot.fat.length,
+        },
+        imported: {
+          hrv: importedHrv,
+          rhr: importedRhr,
+          sleepScore: importedSleepScore,
+          weight: importedWeight,
+          bodyFat: importedBodyFat,
+          workouts: importedWorkouts,
+          sleep: importedSleep,
+          steps: importedSteps,
+          calories: importedCalories,
+          protein: importedProtein,
+          carbs: importedCarbs,
+          fat: importedFat,
+        },
+        diagnostic: {
+          permissions: {
+            authorized: diagnosticReport.permissions.authorized,
+            denied: diagnosticReport.permissions.denied,
+          },
+          samples: diagnosticReport.samples,
+        },
+      } satisfies Json,
+    });
+  }
 
   try {
     if (uploadEnabled) {
