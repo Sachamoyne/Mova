@@ -13,10 +13,36 @@ type SyncResult = {
   activitiesInserted: number;
   sessionsInserted: number;
   activitiesSkippedWindowDuplicate: number;
+  nutritionImported: number;
 };
 
 const WORKOUT_READ_TYPES = ["exerciseTime", "calories", "distance", "steps", "workouts"] as const;
 const WORKOUT_READ_TYPES_FALLBACK = ["exerciseTime", "calories", "distance", "steps"] as const;
+const NUTRITION_READ_TYPES = ["dietaryEnergyConsumed", "dietaryProtein", "dietaryCarbohydrates", "dietaryFat"] as const;
+const HEALTHKIT_READ_TYPES = [...WORKOUT_READ_TYPES, ...NUTRITION_READ_TYPES] as const;
+const HEALTHKIT_READ_TYPES_FALLBACK = [...WORKOUT_READ_TYPES_FALLBACK, ...NUTRITION_READ_TYPES] as const;
+
+type NutritionHealthType = typeof NUTRITION_READ_TYPES[number];
+type NutritionMetricType = Extract<Database["public"]["Enums"]["metric_type"], "calories_total" | "protein" | "carbs" | "fat">;
+type NutritionUnit = "kcal" | "g";
+type NutritionMetricSummary = {
+  raw_samples: number;
+  days: number;
+  rows_upserted: number;
+  error?: string;
+};
+type NutritionSyncSummary = Partial<Record<NutritionMetricType, NutritionMetricSummary>>;
+
+const NUTRITION_SYNC_CONFIG: ReadonlyArray<{
+  healthType: NutritionHealthType;
+  metricType: NutritionMetricType;
+  unit: NutritionUnit;
+}> = [
+  { healthType: "dietaryEnergyConsumed", metricType: "calories_total", unit: "kcal" },
+  { healthType: "dietaryProtein", metricType: "protein", unit: "g" },
+  { healthType: "dietaryCarbohydrates", metricType: "carbs", unit: "g" },
+  { healthType: "dietaryFat", metricType: "fat", unit: "g" },
+];
 
 function mapWorkoutTypeToName(workoutType: string): string {
   const normalized = (workoutType ?? "")
@@ -101,47 +127,169 @@ async function queryHealthKitWorkoutsLast30Days(): Promise<Workout[]> {
   return result.workouts ?? [];
 }
 
-async function ensureWorkoutAuthorization() {
+function getNutritionDateRange() {
+  const endDate = new Date();
+  endDate.setHours(23, 59, 59, 999);
+
+  const startDate = new Date(endDate);
+  startDate.setDate(endDate.getDate() - 30);
+  startDate.setHours(0, 0, 0, 0);
+
+  return {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  };
+}
+
+function aggregateNutritionSamplesByDay(
+  samples: Array<{ startDate?: string; value?: number | string | null }>,
+  userId: string,
+  metricType: NutritionMetricType,
+  unit: NutritionUnit
+): TablesInsert<"health_metrics">[] {
+  const byDay = new Map<string, number>();
+
+  for (const sample of samples) {
+    if (!sample.startDate) continue;
+    const value = Number(sample.value);
+    if (!Number.isFinite(value) || value <= 0) continue;
+
+    const date = toLocalDateStr(sample.startDate);
+    byDay.set(date, (byDay.get(date) ?? 0) + value);
+  }
+
+  return Array.from(byDay.entries()).map(([date, value]) => ({
+    user_id: userId,
+    date,
+    metric_type: metricType,
+    value: Math.round(value * 10) / 10,
+    unit,
+  }));
+}
+
+async function syncNutritionMetric(
+  client: Awaited<ReturnType<typeof getAuthedClient>>["client"],
+  userId: string,
+  healthType: NutritionHealthType,
+  metricType: NutritionMetricType,
+  unit: NutritionUnit,
+  startDate: string,
+  endDate: string
+): Promise<NutritionMetricSummary> {
+  try {
+    const result = await Health.readSamples({
+      dataType: healthType as any,
+      type: healthType,
+      startDate,
+      endDate,
+      ascending: true,
+      limit: 10000,
+    } as any);
+
+    const rawSamples = result.samples ?? [];
+    const rows = aggregateNutritionSamplesByDay(rawSamples, userId, metricType, unit);
+
+    if (rows.length === 0) {
+      return { raw_samples: rawSamples.length, days: 0, rows_upserted: 0 };
+    }
+
+    const { error } = await client
+      .from("health_metrics")
+      .upsert(rows, { onConflict: "user_id,metric_type,date" });
+
+    if (error) {
+      console.error(`[healthKitSync] ${healthType} -> ${metricType} upsert error:`, {
+        error,
+        rawSamples: rawSamples.length,
+        rows: rows.length,
+      });
+      return { raw_samples: rawSamples.length, days: rows.length, rows_upserted: 0, error: error.message };
+    }
+
+    return { raw_samples: rawSamples.length, days: rows.length, rows_upserted: rows.length };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[healthKitSync] ${healthType} -> ${metricType} read error:`, error);
+    return { raw_samples: 0, days: 0, rows_upserted: 0, error: message };
+  }
+}
+
+async function syncNutritionMetrics(
+  client: Awaited<ReturnType<typeof getAuthedClient>>["client"],
+  userId: string
+): Promise<{ nutritionImported: number; nutritionSummary: NutritionSyncSummary; nutritionErrors: string[] }> {
+  const { startDate, endDate } = getNutritionDateRange();
+  const nutritionSummary: NutritionSyncSummary = {};
+  const nutritionErrors: string[] = [];
+  let nutritionImported = 0;
+
+  for (const config of NUTRITION_SYNC_CONFIG) {
+    // eslint-disable-next-line no-await-in-loop
+    const summary = await syncNutritionMetric(
+      client,
+      userId,
+      config.healthType,
+      config.metricType,
+      config.unit,
+      startDate,
+      endDate
+    );
+
+    nutritionSummary[config.metricType] = summary;
+    nutritionImported += summary.rows_upserted;
+    if (summary.error) nutritionErrors.push(`${config.metricType}: ${summary.error}`);
+  }
+
+  return { nutritionImported, nutritionSummary, nutritionErrors };
+}
+
+async function ensureHealthKitAuthorization() {
   try {
     await Health.requestAuthorization({
-      read: [...WORKOUT_READ_TYPES] as unknown as Parameters<typeof Health.requestAuthorization>[0]["read"],
+      read: [...HEALTHKIT_READ_TYPES] as unknown as Parameters<typeof Health.requestAuthorization>[0]["read"],
       write: [],
     });
   } catch {
     // Some plugin versions may reject unknown "workouts" key.
     await Health.requestAuthorization({
-      read: [...WORKOUT_READ_TYPES_FALLBACK],
+      read: [...HEALTHKIT_READ_TYPES_FALLBACK] as unknown as Parameters<typeof Health.requestAuthorization>[0]["read"],
       write: [],
     });
   }
 
   const check = await Health.checkAuthorization({
-    read: [...WORKOUT_READ_TYPES_FALLBACK],
+    read: [...HEALTHKIT_READ_TYPES_FALLBACK] as unknown as Parameters<typeof Health.checkAuthorization>[0]["read"],
   });
 
   const readAuthorized: string[] = check?.readAuthorized ?? [];
   const hasWorkoutsEquivalent =
     readAuthorized.includes("workouts") ||
     readAuthorized.includes("exerciseTime");
+  const hasNutritionEquivalent = NUTRITION_READ_TYPES.some((type) => readAuthorized.includes(type));
 
-  if (!hasWorkoutsEquivalent) {
+  if (!hasWorkoutsEquivalent && !hasNutritionEquivalent) {
     throw new Error(`Authorization not determined: ${readAuthorized.join(",") || "none"}`);
   }
+
+  return { hasWorkoutsEquivalent, hasNutritionEquivalent, readAuthorized };
 }
 
 export async function syncHealthKitToSupabase(): Promise<SyncResult> {
   if (!isIphoneSourceDevice()) {
-    return { recordsImported: 0, activitiesInserted: 0, sessionsInserted: 0, activitiesSkippedWindowDuplicate: 0 };
+    return { recordsImported: 0, activitiesInserted: 0, sessionsInserted: 0, activitiesSkippedWindowDuplicate: 0, nutritionImported: 0 };
   }
 
   const { client, userId } = await getAuthedClient();
   let activitiesInserted = 0;
   let sessionsInserted = 0;
   let activitiesSkippedWindowDuplicate = 0;
+  let nutritionImported = 0;
+  let nutritionSummary: NutritionSyncSummary = {};
+  let nutritionErrors: string[] = [];
 
   try {
-    await ensureWorkoutAuthorization();
-    const workouts = await queryHealthKitWorkoutsLast30Days();
+    const authorization = await ensureHealthKitAuthorization();
+    const workouts = authorization.hasWorkoutsEquivalent ? await queryHealthKitWorkoutsLast30Days() : [];
 
     const since = new Date();
     since.setDate(since.getDate() - 30);
@@ -230,22 +378,30 @@ export async function syncHealthKitToSupabase(): Promise<SyncResult> {
       sessionsInserted = inserted?.length ?? 0;
     }
 
-    const recordsImported = activitiesInserted + sessionsInserted;
+    const nutritionResult = await syncNutritionMetrics(client, userId);
+    nutritionImported = nutritionResult.nutritionImported;
+    nutritionSummary = nutritionResult.nutritionSummary;
+    nutritionErrors = nutritionResult.nutritionErrors;
+
+    const recordsImported = activitiesInserted + sessionsInserted + nutritionImported;
 
     await client.from("sync_logs").insert({
       user_id: userId,
       source: "healthkit",
-      status: "success",
+      status: nutritionErrors.length > 0 ? "partial" : "success",
       records_imported: recordsImported,
+      error_message: nutritionErrors.length > 0 ? nutritionErrors.join("; ") : null,
       payload: {
         workouts_read: workouts.length,
         activities_inserted: activitiesInserted,
         activities_skipped_window_duplicate: activitiesSkippedWindowDuplicate,
         sessions_inserted: sessionsInserted,
+        nutrition_imported: nutritionImported,
+        nutrition: nutritionSummary,
       },
     });
 
-    return { recordsImported, activitiesInserted, sessionsInserted, activitiesSkippedWindowDuplicate };
+    return { recordsImported, activitiesInserted, sessionsInserted, activitiesSkippedWindowDuplicate, nutritionImported };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown healthkit sync error";
 
@@ -253,12 +409,14 @@ export async function syncHealthKitToSupabase(): Promise<SyncResult> {
       user_id: userId,
       source: "healthkit",
       status: "error",
-      records_imported: activitiesInserted + sessionsInserted,
+      records_imported: activitiesInserted + sessionsInserted + nutritionImported,
       error_message: message,
       payload: {
         activities_inserted: activitiesInserted,
         activities_skipped_window_duplicate: activitiesSkippedWindowDuplicate,
         sessions_inserted: sessionsInserted,
+        nutrition_imported: nutritionImported,
+        nutrition: nutritionSummary,
       },
     });
 
