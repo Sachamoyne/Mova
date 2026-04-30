@@ -18,6 +18,7 @@
 import { Health } from "@capgo/capacitor-health";
 import type { Workout } from "@capgo/capacitor-health/dist/esm/definitions";
 const DEV = import.meta.env.DEV;
+const RECENT_NUTRITION_DAYS = 14;
 
 const HEALTH_READ_TYPES = [
   "heartRateVariability",
@@ -453,8 +454,7 @@ async function fetchDailySteps(days: number): Promise<HealthSample[]> {
  * Récupère les calories alimentaires consommées (dietaryEnergyConsumed)
  * puis agrège par jour local.
  */
-async function fetchDailyCalories(days: number): Promise<HealthSample[]> {
-  const { startDate, endDate } = localDayIsoRange(days);
+async function fetchDailyCalories(startDate: string, endDate: string): Promise<HealthSample[]> {
   try {
     const result = await Health.readSamples({
       startDate,
@@ -491,13 +491,11 @@ async function fetchDailyCalories(days: number): Promise<HealthSample[]> {
   }
 }
 
-async function fetchDietaryProtein(days: number): Promise<HealthSample[]> {
+async function fetchDietaryProtein(startDate: string, endDate: string): Promise<HealthSample[]> {
   try {
-    const { startDate: startStr, endDate: endStr } = localDayIsoRange(days);
-
     const result = await Health.readSamples({
-      startDate: startStr,
-      endDate: endStr,
+      startDate,
+      endDate,
       dataType: "dietaryProtein" as any,
       type: "dietaryProtein",
       ascending: true,
@@ -533,13 +531,11 @@ async function fetchDietaryProtein(days: number): Promise<HealthSample[]> {
   }
 }
 
-async function fetchDietaryCarbohydrates(days: number): Promise<HealthSample[]> {
+async function fetchDietaryCarbohydrates(startDate: string, endDate: string): Promise<HealthSample[]> {
   try {
-    const { startDate: startStr, endDate: endStr } = localDayIsoRange(days);
-
     const result = await Health.readSamples({
-      startDate: startStr,
-      endDate: endStr,
+      startDate,
+      endDate,
       dataType: "dietaryCarbohydrates" as any,
       type: "dietaryCarbohydrates",
       ascending: true,
@@ -575,13 +571,11 @@ async function fetchDietaryCarbohydrates(days: number): Promise<HealthSample[]> 
   }
 }
 
-async function fetchDietaryFat(days: number): Promise<HealthSample[]> {
+async function fetchDietaryFat(startDate: string, endDate: string): Promise<HealthSample[]> {
   try {
-    const { startDate: startStr, endDate: endStr } = localDayIsoRange(days);
-
     const result = await Health.readSamples({
-      startDate: startStr,
-      endDate: endStr,
+      startDate,
+      endDate,
       dataType: "dietaryFat" as any,
       type: "dietaryFat",
       ascending: true,
@@ -617,16 +611,19 @@ async function fetchDietaryFat(days: number): Promise<HealthSample[]> {
   }
 }
 
-async function fetchDailyNutrition(days: number): Promise<{
+async function fetchRecentDailyNutrition(): Promise<{
   caloriesTotal: HealthSample[];
   protein: HealthSample[];
   carbohydrates: HealthSample[];
   fat: HealthSample[];
 }> {
-  const caloriesTotal = await fetchDailyCalories(days);
-  const protein = await fetchDietaryProtein(days);
-  const carbohydrates = await fetchDietaryCarbohydrates(days);
-  const fat = await fetchDietaryFat(days);
+  const { startDate, endDate } = localDayIsoRange(RECENT_NUTRITION_DAYS);
+  if (DEV) console.log("[health] fetchRecentDailyNutrition window:", { startDate, endDate, days: RECENT_NUTRITION_DAYS });
+
+  const caloriesTotal = await fetchDailyCalories(startDate, endDate);
+  const protein = await fetchDietaryProtein(startDate, endDate);
+  const carbohydrates = await fetchDietaryCarbohydrates(startDate, endDate);
+  const fat = await fetchDietaryFat(startDate, endDate);
 
   return { caloriesTotal, protein, carbohydrates, fat };
 }
@@ -739,7 +736,7 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
 async function fetchNativeHealthData(days: number): Promise<HealthSnapshot> {
   console.group("[health] ── ÉTAPE 2 : Fetch données natives ──");
 
-  const [hrv, weight, restingHR, bodyFat, sleep, workouts, steps, nutrition] =
+  const [hrv, weight, restingHR, bodyFat, sleep, workouts, steps] =
     await Promise.allSettled([
       fetchSamples("heartRateVariability", days),
       fetchSamples("weight", days),
@@ -748,7 +745,6 @@ async function fetchNativeHealthData(days: number): Promise<HealthSnapshot> {
       fetchNativeSleep(days),
       fetchNativeWorkouts(days),
       fetchDailySteps(days),                 // queryAggregated bucket day sum
-      fetchDailyNutrition(days),             // dietaryEnergyConsumed puis protein/carbs/fat
     ]);
 
   const settledEntries = [
@@ -759,7 +755,6 @@ async function fetchNativeHealthData(days: number): Promise<HealthSnapshot> {
     ["sleep", sleep],
     ["workouts", workouts],
     ["steps", steps],
-    ["nutrition", nutrition],
   ] as const;
   for (const [name, result] of settledEntries) {
     if (result.status === "rejected") {
@@ -768,9 +763,7 @@ async function fetchNativeHealthData(days: number): Promise<HealthSnapshot> {
   }
 
   const sleepVal = sleep.status === "fulfilled" ? sleep.value : [];
-  const nutritionVal = nutrition.status === "fulfilled"
-    ? nutrition.value as Awaited<ReturnType<typeof fetchDailyNutrition>>
-    : { caloriesTotal: [], protein: [], carbohydrates: [], fat: [] };
+  const nutritionVal = await fetchRecentDailyNutrition();
 
   const snapshot: HealthSnapshot = {
     hrv:           hrv.status           === "fulfilled" ? hrv.value           : [],
