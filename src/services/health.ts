@@ -29,6 +29,7 @@ const HEALTH_READ_TYPES = [
   "basalCalories",
   "bodyFat",
   "restingHeartRate",
+  "workouts",
   "dietaryProtein",
   "dietaryCarbohydrates",
   "dietaryFat",
