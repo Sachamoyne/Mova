@@ -128,7 +128,7 @@ function formatErrorDetails(err: unknown): Record<string, unknown> {
 
 function logHealthFetchError(context: string, err: unknown) {
   const details = formatErrorDetails(err);
-  if (DEV) console.warn(`[health] ${context} failed`, details);
+  console.warn(`[health] ${context} failed`, details);
 }
 
 function getPlatform(): "ios" | "android" | "web" {
@@ -477,7 +477,7 @@ async function fetchDailyCalories(startDate: string, endDate: string): Promise<H
     const today = toLocalDateStr(new Date().toISOString());
     const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
     const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
-    if (DEV) console.log("[health] fetchDailyCalories(dietaryEnergyConsumed):", {
+    console.log("[health] fetchDailyCalories(dietaryEnergyConsumed):", {
       rawSamples: samples.length,
       aggregatedDays: byDay.length,
       rawUnits,
@@ -517,7 +517,7 @@ async function fetchDietaryProtein(startDate: string, endDate: string): Promise<
     const today = toLocalDateStr(new Date().toISOString());
     const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
     const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
-    if (DEV) console.log("[health] fetchDietaryProtein:", {
+    console.log("[health] fetchDietaryProtein:", {
       rawSamples: samples.length,
       aggregatedDays: byDay.length,
       rawUnits,
@@ -557,7 +557,7 @@ async function fetchDietaryCarbohydrates(startDate: string, endDate: string): Pr
     const today = toLocalDateStr(new Date().toISOString());
     const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
     const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
-    if (DEV) console.log("[health] fetchDietaryCarbohydrates:", {
+    console.log("[health] fetchDietaryCarbohydrates:", {
       rawSamples: samples.length,
       aggregatedDays: byDay.length,
       rawUnits,
@@ -597,7 +597,7 @@ async function fetchDietaryFat(startDate: string, endDate: string): Promise<Heal
     const today = toLocalDateStr(new Date().toISOString());
     const todayTotal = byDay.find((s) => s.date === today)?.value ?? 0;
     const rawUnits = Array.from(new Set((result.samples ?? []).map((s: any) => String(s.unit ?? "unknown"))));
-    if (DEV) console.log("[health] fetchDietaryFat:", {
+    console.log("[health] fetchDietaryFat:", {
       rawSamples: samples.length,
       aggregatedDays: byDay.length,
       rawUnits,
@@ -618,7 +618,7 @@ async function fetchRecentDailyNutrition(): Promise<{
   fat: HealthSample[];
 }> {
   const { startDate, endDate } = localDayIsoRange(RECENT_NUTRITION_DAYS);
-  if (DEV) console.log("[health] fetchRecentDailyNutrition window:", { startDate, endDate, days: RECENT_NUTRITION_DAYS });
+  console.log("[health] fetchRecentDailyNutrition window:", { startDate, endDate, days: RECENT_NUTRITION_DAYS });
 
   const caloriesTotal = await fetchDailyCalories(startDate, endDate);
   const protein = await fetchDietaryProtein(startDate, endDate);
@@ -780,7 +780,7 @@ async function fetchNativeHealthData(days: number): Promise<HealthSnapshot> {
     fat:           nutritionVal.fat,
   };
 
-  if (DEV) console.log("[health] ✓ Snapshot :", {
+  console.log("[health] ✓ Snapshot :", {
     hrv:           snapshot.hrv.length,
     weight:        snapshot.weight.length,
     restingHR:     snapshot.restingHR.length,
