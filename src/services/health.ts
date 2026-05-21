@@ -694,6 +694,7 @@ async function fetchBodyFat(days: number): Promise<HealthSample[]> {
 
 async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
   const { startDate, endDate } = isoRange(days);
+  console.log("[workouts-window]", { startDate, endDate, days, nowLocal: new Date().toString() });
   try {
     const result = await Health.queryWorkouts({
       startDate,
@@ -701,9 +702,16 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
       limit: 1000,
       ascending: true,
     });
-    const types = Array.from(new Set((result.workouts ?? []).map((w) => w.workoutType))).slice(0, 20);
-    if (DEV) console.log("[health] queryWorkouts types (sample):", types);
     const workouts = result.workouts ?? [];
+    console.log("[all-workouts]", workouts.map((w) => ({
+      type: w.workoutType,
+      date: w.startDate,
+      duration: w.duration,
+      calories: w.totalEnergyBurned,
+      source: w.sourceName,
+    })));
+    const types = Array.from(new Set(workouts.map((w) => w.workoutType))).slice(0, 20);
+    if (DEV) console.log("[health] queryWorkouts types (sample):", types);
     let mapped = 0;
     let unmapped = 0;
     const unmappedTypes: string[] = [];
