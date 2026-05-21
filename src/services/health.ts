@@ -245,6 +245,7 @@ function mapWorkoutType(workoutType: string): "running" | "cycling" | "swimming"
     case "tennis":
     case "tableTennis":
       return "tennis";
+    case "padel":
     case "squash":
     case "racquetball":
     case "paddleSports":
@@ -679,6 +680,7 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
     const workouts = result.workouts ?? [];
     let mapped = 0;
     let unmapped = 0;
+    const unmappedTypes: string[] = [];
     let activeEnergyCount = 0;
     let totalEnergyFallbackCount = 0;
     const out: WorkoutData[] = [];
@@ -687,6 +689,7 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
       const sportType = mapWorkoutType(w.workoutType);
       if (!sportType) {
         unmapped++;
+        unmappedTypes.push(w.workoutType ?? "undefined");
         continue;
       }
       const activeEnergy =
@@ -717,7 +720,7 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
     }
 
     if (unmapped > 0) {
-      if (DEV) console.warn("[health] queryWorkouts unmapped workouts:", { unmapped, mapped, total: workouts.length });
+      console.warn("[health] queryWorkouts unmapped workouts:", { unmapped, mapped, total: workouts.length, types: [...new Set(unmappedTypes)] });
     } else {
       if (DEV) console.log("[health] queryWorkouts mapped workouts:", { mapped, total: workouts.length });
     }
