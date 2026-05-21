@@ -12,7 +12,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { isSyncUploadAllowed } from "@/lib/syncConsent";
 import { isIphoneSourceDevice } from "@/lib/platform";
 
-const MIN_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 15 min entre deux syncs foreground
+const MIN_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 min entre deux syncs foreground
+
+// One-time flag: forces a sync on next mount after the padel mapping fix so
+// sessions that were silently dropped (not stored as "other") get backfilled.
+// Once fired, the key is set and the forced sync never runs again.
+const FORCE_RESYNC_KEY = "mova:force_resync_padel_v1";
 
 function useAutoSync() {
   const { user } = useAuth();
@@ -53,12 +58,16 @@ function useAutoSync() {
     }
   }, [queryClient, syncStatus?.lastSync]);
 
-  // Sync au montage si jamais synchronisé ou sync > 1h
+  // Sync au montage si jamais synchronisé, sync > 30 min, ou flag de resync forcé
   useEffect(() => {
     if (!user) return;
-    const shouldSync = !syncStatus?.lastSync ||
+    const forceResync = !localStorage.getItem(FORCE_RESYNC_KEY);
+    const shouldSync = forceResync || !syncStatus?.lastSync ||
       (Date.now() - syncStatus.lastSync.getTime()) > 30 * 60 * 1000;
-    if (shouldSync) runSync(user.id, "montage");
+    if (shouldSync) {
+      if (forceResync) localStorage.setItem(FORCE_RESYNC_KEY, "1");
+      runSync(user.id, forceResync ? "force-resync-padel" : "montage");
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, syncStatus?.lastSync?.getTime()]);
 
