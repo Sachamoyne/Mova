@@ -214,11 +214,37 @@ function groupByDaySum(samples: HealthSample[]): HealthSample[] {
   }));
 }
 
+type SupportedSportType = "running" | "cycling" | "swimming" | "tennis" | "padel" | "strength";
+
+/**
+ * Tries to identify a padel session from HealthKit workout metadata.
+ * Garmin (and other devices) log padel as workoutType="other" and encode
+ * the actual activity in metadata. We search every key/value for "padel".
+ * Returns "padel" if a match is found, null otherwise.
+ */
+function detectSportFromMetadata(
+  metadata: Record<string, string> | undefined
+): SupportedSportType | null {
+  if (!metadata) return null;
+  for (const [key, value] of Object.entries(metadata)) {
+    const kl = key.toLowerCase();
+    const vl = (value ?? "").toLowerCase();
+    if (kl.includes("padel") || vl.includes("padel")) return "padel";
+    // Garmin activity-type codes: 30 = padel (unconfirmed — kept as fallback
+    // until Xcode logs confirm the exact key/value pair).
+    if (
+      (kl.includes("activitytype") || kl.includes("activity_type") || kl.includes("garmin")) &&
+      vl === "30"
+    ) return "padel";
+  }
+  return null;
+}
+
 /**
  * Mappe un WorkoutType HealthKit vers le sport_type de la base de données.
  * Retourne null si le type n'est pas supporté.
  */
-function mapWorkoutType(workoutType: string): "running" | "cycling" | "swimming" | "tennis" | "padel" | "strength" | null {
+function mapWorkoutType(workoutType: string): SupportedSportType | null {
   const raw = workoutType ?? "";
   const normalized = raw
     .replace("HKWorkoutActivityType", "")
@@ -686,7 +712,23 @@ async function fetchNativeWorkouts(days: number): Promise<WorkoutData[]> {
     const out: WorkoutData[] = [];
 
     for (const w of workouts) {
-      const sportType = mapWorkoutType(w.workoutType);
+      // For "other" workouts: log full metadata so we can identify the
+      // Garmin padel encoding, then attempt metadata-based detection.
+      if (w.workoutType === "other") {
+        console.log("[padel-debug] other workout:", {
+          startDate: w.startDate,
+          duration: w.duration,
+          totalEnergyBurned: w.totalEnergyBurned,
+          sourceName: w.sourceName,
+          sourceId: w.sourceId,
+          metadata: w.metadata ?? {},
+        });
+      }
+
+      const sportType =
+        mapWorkoutType(w.workoutType) ??
+        (w.workoutType === "other" ? detectSportFromMetadata(w.metadata) : null);
+
       if (!sportType) {
         unmapped++;
         unmappedTypes.push(w.workoutType ?? "undefined");
